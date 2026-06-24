@@ -5,7 +5,7 @@ error_reporting(E_ALL);
 
 define('ROOT_DIR', dirname(__DIR__));
 
-require_once ROOT_DIR . '/config/database.php';
+require_once ROOT_DIR . '/Config/database.php';
 require_once ROOT_DIR . '/Src/Core/response.php';
 require_once ROOT_DIR . '/Src/Controllers/ridercontroller.php';
 
@@ -22,14 +22,18 @@ if (file_exists($envPath)) {
 
 use App\Controllers\RiderController;
 
-echo "=== Running Ride Lifecycle State Transition TestFlow ===\n";
-
 $controller = new RiderController();
 
-// Simulate advancing Ride ID 3 (which is currently 'accepted') to 'driver_arrived'
-$mockInputData = [
-    "ride_id" => 3,
-    "next_status" => "driver_arrived"
+echo "=== Running Sequential Ride Lifecycle Test Suite ===\n\n";
+
+// Mock operational payload configuration
+// Ensure ride_id matches an active ride record currently set to 'started' in your database
+$mockPayload = [
+    "ride_id" => 1,
+    "driver_id" => 1
 ];
 
-$controller->updateRideStatus($mockInputData);
+echo "--> Executing Trip Finalization State Transition...\n";
+// Call your specific completeRide method instead of the generic updateRideStatus
+$controller->completeRide($mockPayload);
+echo "\n";

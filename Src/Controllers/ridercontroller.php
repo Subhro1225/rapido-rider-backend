@@ -5,6 +5,63 @@ use Config\Database;
 use App\Core\Response;
 
 class RiderController {
+
+    public function signup($data) {
+        $name = $data['name'] ?? '';
+        $mobile = $data['mobile'] ?? '';
+        $password = $data['password'] ?? '';
+
+        if (empty($name) || empty($mobile) || empty($password)) {
+            Response::json([
+                "status" => "error",
+                "message" => "All registration fields (name, mobile, password) are required."
+            ], 400);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            // Check if the mobile number is already registered
+            $checkQuery = "SELECT id FROM drivers WHERE mobile = :mobile LIMIT 1";
+            $checkStmt = $db->prepare($checkQuery);
+            $checkStmt->execute([':mobile' => $mobile]);
+            
+            if ($checkStmt->fetch()) {
+                Response::json([
+                    "status" => "error",
+                    "message" => "A driver account with this mobile number already exists."
+                ], 409);
+                return;
+            }
+
+            // OPTIMIZED: Securely hash the password using Bcrypt before saving it
+            $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
+
+            // Insert the new driver record into the database
+            $insertQuery = "INSERT INTO drivers (name, mobile, password, is_available, created_at) 
+                            VALUES (:name, :mobile, :password, 0, NOW())";
+            
+            $insertStmt = $db->prepare($insertQuery);
+            $insertStmt->execute([
+                ':name' => $name,
+                ':mobile' => $mobile,
+                ':password' => $hashedPassword
+            ]);
+
+            Response::json([
+                "status" => "success",
+                "message" => "Driver registration completed successfully.",
+                "driver_id" => $db->lastInsertId()
+            ], 21);
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Registration engine failure: " . $e->getMessage()
+            ], 500);
+        }
+    }
     
     public function login($data) {
         $mobile = $data['mobile'] ?? '';
@@ -56,37 +113,56 @@ class RiderController {
 
     public function toggleAvailability($data) {
         $driverId = $data['driver_id'] ?? '';
-        // Expecting 1 for online, 0 for offline
-        $isAvailable = isset($data['is_available']) ? (int)$data['is_available'] : null; 
+        $requestedState = $data['is_available'] ?? 0; // Default to 0 (false) if not specified
 
-        if (empty($driverId) || $isAvailable === null) {
+        if (empty($driverId)) {
             Response::json([
                 "status" => "error",
-                "message" => "Driver ID and availability status are required."
+                "message" => "Driver ID parameter is required to update status."
             ], 400);
+            return;
         }
 
         try {
             $db = Database::getInstance();
 
-            // Update the specific driver's availability state
-            $query = "UPDATE drivers SET is_available = :is_available WHERE id = :id";
+            // 1. VERIFY LOGGED-IN/ACTIVE STATUS: Check if driver exists in database first
+            $checkQuery = "SELECT id FROM drivers WHERE id = :driver_id LIMIT 1";
+            $checkStmt = $db->prepare($checkQuery);
+            $checkStmt->execute([':driver_id' => $driverId]);
+            $driverExists = $checkStmt->fetch();
+
+            // If driver doesn't exist, they cannot be marked active. Force state to 0 (false).
+            if (!$driverExists) {
+                Response::json([
+                    "status" => "error",
+                    "message" => "Unauthorized state modification. Driver must be logged in/registered. Forcing status to offline.",
+                    "is_available" => false
+                ], 401);
+                return;
+            }
+
+            // 2. Set state based on verification
+            $finalState = $requestedState ? 1 : 0;
+
+            $query = "UPDATE drivers SET is_available = :is_available, updated_at = NOW() WHERE id = :driver_id";
             $stmt = $db->prepare($query);
             $stmt->execute([
-                ':is_available' => $isAvailable,
-                ':id' => $driverId
+                ':is_available' => $finalState,
+                ':driver_id' => $driverId
             ]);
 
             Response::json([
                 "status" => "success",
-                "message" => "Rider availability status updated successfully.",
-                "current_status" => $isAvailable
+                "message" => "Driver availability status updated successfully.",
+                "driver_id" => $driverId,
+                "is_available" => (bool)$finalState
             ]);
 
         } catch (\PDOException $e) {
             Response::json([
                 "status" => "error",
-                "message" => "Database update failed: " . $e->getMessage()
+                "message" => "Availability engine tracking failure: " . $e->getMessage()
             ], 500);
         }
     }
@@ -133,130 +209,117 @@ class RiderController {
         $driverId = $data['driver_id'] ?? '';
 
         if (empty($rideId) || empty($driverId)) {
-            Response::json(["status" => "error", "message" => "Ride ID and Driver ID parameters are required."], 400);
+            Response::json([
+                "status" => "error",
+                "message" => "Ride ID and Driver ID parameters are required."
+            ], 400);
             return;
         }
 
         try {
             $db = Database::getInstance();
-
-            // Begin the atomic database transaction safety net
             $db->beginTransaction();
 
-            // 1. Lock the specific row for updates to prevent race conditions (FOR UPDATE)
-            $checkQuery = "SELECT ride_status FROM rides WHERE id = :ride_id LIMIT 1 FOR UPDATE";
-            $checkStmt = $db->prepare($checkQuery);
-            $checkStmt->execute([':ride_id' => $rideId]);
-            $ride = $checkStmt->fetch();
+            // Row-level lock checking to verify ride is still waiting
+            $query = "SELECT ride_status FROM rides WHERE id = :ride_id FOR UPDATE";
+            $stmt = $db->prepare($query);
+            $stmt->execute([':ride_id' => $rideId]);
+            $ride = $stmt->fetch();
 
             if (!$ride || $ride['ride_status'] !== 'waiting') {
-                // Cancel transaction and release locks gracefully
-                $db->rollBack();
                 Response::json([
                     "status" => "error",
-                    "message" => "This ride request is no longer available or has already been accepted."
+                    "message" => "Ride request is no longer available or has already been claimed."
                 ], 409);
+                $db->rollBack();
                 return;
             }
 
-            // 2. Execute the state mutation
-            $query = "UPDATE rides 
-                      SET ride_status = 'accepted', driver_id = :driver_id 
-                      WHERE id = :ride_id AND ride_status = 'waiting'";
-            
-            $stmt = $db->prepare($query);
-            $stmt->execute([
+            // 1. Update the ride status to accepted and link the driver
+            $updateRide = "UPDATE rides SET ride_status = 'accepted', driver_id = :driver_id WHERE id = :ride_id";
+            $rideStmt = $db->prepare($updateRide);
+            $rideStmt->execute([
                 ':driver_id' => $driverId,
                 ':ride_id' => $rideId
             ]);
 
-            // If everything executes flawlessly, commit all changes permanently to disk
-            $db->commit();
+            // 2. AUTOMATION GATEWAY: Turn driver offline immediately so they disappear from open pooling queues
+            $updateDriver = "UPDATE drivers SET is_online = 0 WHERE id = :driver_id";
+            $driverStmt = $db->prepare($updateDriver);
+            $driverStmt->execute([':driver_id' => $driverId]);
 
+            $db->commit();
+            
             Response::json([
                 "status" => "success",
-                "message" => "Ride successfully accepted and assigned to driver.",
-                "ride_id" => $rideId,
-                "driver_id" => $driverId
+                "message" => "Ride successfully secured. Driver status automatically set to BUSY/OFFLINE."
             ]);
 
         } catch (\PDOException $e) {
-            // Revert database back to its exact pre-request state on any exception
-            if ($db->inTransaction()) {
-                $db->rollBack();
-            }
+            $db->rollBack();
             Response::json([
                 "status" => "error",
-                "message" => "Transaction failed, safely rolled back: " . $e->getMessage()
+                "message" => "Transaction failed: " . $e->getMessage()
             ], 500);
         }
     }
 
-    public function updateRideStatus($data) {
+    public function completeRide($data) {
         $rideId = $data['ride_id'] ?? '';
-        $nextStatus = $data['next_status'] ?? ''; // Expecting: 'driver_arrived', 'started', or 'completed'
+        $driverId = $data['driver_id'] ?? '';
 
-        $allowedStatuses = ['driver_arrived', 'started', 'completed'];
-
-        if (empty($rideId) || !in_array($nextStatus, $allowedStatuses)) {
+        if (empty($rideId) || empty($driverId)) {
             Response::json([
                 "status" => "error",
-                "message" => "Invalid target status or missing Ride ID."
+                "message" => "Ride ID and Driver ID parameters are required."
             ], 400);
+            return;
         }
 
         try {
             $db = Database::getInstance();
+            $db->beginTransaction();
 
-            // Fetch the current status to validate state machine rules
-            $checkQuery = "SELECT ride_status FROM rides WHERE id = :ride_id LIMIT 1";
-            $checkStmt = $db->prepare($checkQuery);
-            $checkStmt->execute([':ride_id' => $rideId]);
-            $ride = $checkStmt->fetch();
-
-            if (!$ride) {
-                Response::json([
-                    "status" => "error",
-                    "message" => "Ride transaction records not found."
-                ], 404);
-                return;
-            }
-
-            $currentStatus = $ride['ride_status'];
-
-            // Enforce sequential business rules
-            if ($nextStatus === 'driver_arrived' && $currentStatus !== 'accepted') {
-                Response::json(["status" => "error", "message" => "Cannot mark arrived unless trip is accepted."], 400);
-                return;
-            }
-            if ($nextStatus === 'started' && $currentStatus !== 'driver_arrived') {
-                Response::json(["status" => "error", "message" => "Cannot start ride before driver arrives."], 400);
-                return;
-            }
-            if ($nextStatus === 'completed' && $currentStatus !== 'started') {
-                Response::json(["status" => "error", "message" => "Cannot complete a ride that hasn't started."], 400);
-                return;
-            }
-
-            // Execute the valid state update
-            $query = "UPDATE rides SET ride_status = :next_status WHERE id = :ride_id";
+            // Verify the ride belongs to this driver and is currently active ('started')
+            $query = "SELECT ride_status FROM rides WHERE id = :ride_id AND driver_id = :driver_id FOR UPDATE";
             $stmt = $db->prepare($query);
             $stmt->execute([
-                ':next_status' => $nextStatus,
-                ':ride_id' => $rideId
+                ':ride_id' => $rideId,
+                ':driver_id' => $driverId
             ]);
+            $ride = $stmt->fetch();
+
+            if (!$ride || $ride['ride_status'] !== 'started') {
+                Response::json([
+                    "status" => "error",
+                    "message" => "Invalid state transition. Ride must be in 'started' status to complete."
+                ], 400);
+                $db->rollBack();
+                return;
+            }
+
+            // 1. Transition the ride lifecycle state to completed
+            $updateRide = "UPDATE rides SET ride_status = 'completed' WHERE id = :ride_id";
+            $rideStmt = $db->prepare($updateRide);
+            $rideStmt->execute([':ride_id' => $rideId]);
+
+            // 2. AUTOMATION GATEWAY: Free up the driver and toggle them back to AVAILABLE
+            $updateDriver = "UPDATE drivers SET is_online = 1, updated_at = NOW() WHERE id = :driver_id";
+            $driverStmt = $db->prepare($updateDriver);
+            $driverStmt->execute([':driver_id' => $driverId]);
+
+            $db->commit();
 
             Response::json([
                 "status" => "success",
-                "message" => "Ride state advanced to tracking phase: " . $nextStatus,
-                "ride_id" => $rideId,
-                "ride_status" => $nextStatus
+                "message" => "Ride target completed successfully. Driver state automatically reset to AVAILABLE."
             ]);
 
         } catch (\PDOException $e) {
+            $db->rollBack();
             Response::json([
                 "status" => "error",
-                "message" => "Lifecycle mutation failed: " . $e->getMessage()
+                "message" => "Completion engine failure: " . $e->getMessage()
             ], 500);
         }
     }
