@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# 1. If the requested URL is an actual real file or folder, just open it normally
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# 2. Otherwise, silently redirect every single API request to our public/index.php file
+RewriteRule ^(.*)$ index.php [QSA,L]
