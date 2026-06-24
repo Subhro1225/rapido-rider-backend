@@ -64,3 +64,6 @@ C:\xampp\php\php.exe Test/test_api_flow.php
 
 ### 12. Test 5KM Proximity Geospatial Range Filter
 C:\xampp\php\php.exe Test/test_range_flow.php
+
+### 13. Test Hashed OTP Tenerated The Time Of The Ride Started
+C:\xampp\php\php.exe Test/test_otp_flow.php

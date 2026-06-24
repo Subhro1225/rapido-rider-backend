@@ -38,7 +38,8 @@ rapido-rider-backend/
 │   ├── test_location_flow.php      # CLI geospatial update telemetry tester
 │   ├── test_login_flow.php         # CLI authentication testing engine
 │   ├── test_payment_flow.php       # CLI transaction settlement injection tool
-│   └── test_polling_flow.php       # CLI ride availability queue scanner
+│   ├── test_polling_flow.php       # CLI ride availability queue scanner
+│   └── test_otp_flow.php           # verifies the enctypted otp 
 ├── .env                            # Active local environmental credentials
 ├── .gitignore                      # Git path tracking exclusions
 ├── env.sample                      # Template configuration example
@@ -80,6 +81,24 @@ The underlying persistence layer relies on optimized MySQL tables with structura
 - [x] Milestone 9: Cross-Table Driver Earnings & Completed Trips Analytics Engine
 - [x] Milestone 10: Live Geospatial Coordinate Refresh Tracking Engine
 
+## 🚀 Phase 4: Production Core Enhancements & Geospatial Engine
+
+In this development cycle, the backend architecture was upgraded to transition from a basic structural prototype to a production-grade, state-synchronized ride-hailing core. This phase introduced strict state machine rules, identity validation guards, and coordinate-based proximity math.
+
+### 📊 Engineering Change Matrix
+
+| Feature Module | Database Mutations | Core Engine Architecture Changes | Validation Test Suite Component |
+| :--- | :--- | :--- | :--- |
+| **1. Secure Driver Account Registration** | Synced standard entity tracking attributes to the `drivers` schema interface. | Implemented `signup()` inside `RiderController` using secure hashing filters for credential encryption. | `Test/test_signup_flow.php` |
+| **2. Active Availability Verification Guards** | `ALTER TABLE drivers ADD COLUMN is_online TINYINT(1) NOT NULL DEFAULT 0 AFTER password;` | Updated `toggleAvailability()` to enforce authentication checks, restricting status mutations to verified driver accounts. | `Test/test_availability_flow.php` |
+| **3. Automated Ride Lifecycle Sync** | Native state tracking modifications applied dynamically to active `rides` state machines. | Injected automated transactional logic into `acceptRide()` (sets driver `is_online = 0`) and `completeRide()` (resets driver `is_online = 1`). | `Test/test_lifecycle_flow.php` |
+| **4. 5KM Geospatial Proximity Filtering** | `ALTER TABLE rides ADD COLUMN pickup_latitude DECIMAL(10, 8) NULL AFTER destination, ADD COLUMN pickup_longitude DECIMAL(11, 8) NULL AFTER pickup_latitude;` | Built `getNearbyRides()` utilizing a spherical geometry Haversine formula calculation query restricted to a strict 5.0km search threshold. | `Test/test_range_flow.php` |
+
+### 🛠️ Key Architectural Resolutions
+
+* **Automated State Synchronization:** Implemented an automated state transition cycle based on the ride lifecycle. The second a driver accepts a ride, they are marked busy (`is_online = 0`) to decouple them from open pooling queues. Once the trip transitions to completed, the system auto-resets their availability state back to open (`is_online = 1`).
+* **Geospatial Range Calculations:** Integrated the mathematical **Haversine Formula** within the native PDO layer to evaluate distances dynamically on a spherical Earth surface using a fixed radius constant of $6371\text{ km}$. This optimizes matching logic by strictly filtering incoming requests to a $5.0\text{ km}$ bubble around the driver's streaming telemetry point.
+* **Namespace Memory Integration:** Resolved decoupling errors between the global runtime environment and the test runner scripts by explicitly locating and instantiating the controller memory layer via its declared namespace string: `\App\Controllers\RiderController()`.
 ---
 
 ## 📄 Documentation Matrix

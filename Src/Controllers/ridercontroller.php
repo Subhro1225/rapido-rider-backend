@@ -53,7 +53,7 @@ class RiderController {
                 "status" => "success",
                 "message" => "Driver registration completed successfully.",
                 "driver_id" => $db->lastInsertId()
-            ], 21);
+            ], 201);
 
         } catch (\PDOException $e) {
             Response::json([
@@ -73,6 +73,7 @@ class RiderController {
                 "status" => "error",
                 "message" => "Mobile and password fields are required."
             ], 400);
+            return;
         }
 
         try {
@@ -244,7 +245,7 @@ class RiderController {
             ]);
 
             // 2. AUTOMATION GATEWAY: Turn driver offline immediately so they disappear from open pooling queues
-            $updateDriver = "UPDATE drivers SET is_online = 0 WHERE id = :driver_id";
+            $updateDriver = "UPDATE drivers SET is_available = 0 WHERE id = :driver_id";
             $driverStmt = $db->prepare($updateDriver);
             $driverStmt->execute([':driver_id' => $driverId]);
 
@@ -304,7 +305,7 @@ class RiderController {
             $rideStmt->execute([':ride_id' => $rideId]);
 
             // 2. AUTOMATION GATEWAY: Free up the driver and toggle them back to AVAILABLE
-            $updateDriver = "UPDATE drivers SET is_online = 1, updated_at = NOW() WHERE id = :driver_id";
+            $updateDriver = "UPDATE drivers SET is_available = 1, updated_at = NOW() WHERE id = :driver_id";
             $driverStmt = $db->prepare($updateDriver);
             $driverStmt->execute([':driver_id' => $driverId]);
 
@@ -499,15 +500,15 @@ class RiderController {
             $db = Database::getInstance();
 
             // 1. First verify driver is active and online
-            $checkQuery = "SELECT is_online FROM drivers WHERE id = :driver_id LIMIT 1";
+            $checkQuery = "SELECT is_available FROM drivers WHERE id = :driver_id LIMIT 1";
             $checkStmt = $db->prepare($checkQuery);
             $checkStmt->execute([':driver_id' => $driverId]);
             $driver = $checkStmt->fetch();
 
-            if (!$driver || !$driver['is_online']) {
+            if (!$driver || !$driver['is_available']) {
                 Response::json([
                     "status" => "error",
-                    "message" => "Driver must toggle availability status to ONLINE to poll nearby requests."
+                    "message" => "Driver must toggle availability status to AVAILABLE to poll nearby requests."
                 ], 403);
                 return;
             }
@@ -543,6 +544,73 @@ class RiderController {
             Response::json([
                 "status" => "error",
                 "message" => "Geospatial engine calculation failure: " . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function startRideWithOtp($data) {
+        $rideId = $data['ride_id'] ?? '';
+        $driverId = $data['driver_id'] ?? '';
+        $inputOtp = $data['otp'] ?? '';
+
+
+        if (empty($rideId) || empty($driverId) || empty($inputOtp)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Ride ID, Driver ID, and OTP verification code are required."
+            ], 400);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+            $db->beginTransaction();
+
+            // Fetch the encrypted OTP string and current status
+            $query = "SELECT otp, ride_status FROM rides WHERE id = :ride_id AND driver_id = :driver_id FOR UPDATE";
+            $stmt = $db->prepare($query);
+            $stmt->execute([
+                ':ride_id' => $rideId,
+                ':driver_id' => $driverId
+            ]);
+            $ride = $stmt->fetch();
+
+            if (!$ride || $ride['ride_status'] !== 'accepted') {
+                Response::json([
+                    "status" => "error",
+                    "message" => "Invalid lifecycle state. Ride must be 'accepted' to start verification."
+                ], 400);
+                $db->rollBack();
+                return;
+            }
+
+            // 1. CRYPTOGRAPHIC VERIFICATION: Match the input plaintext against the database hash
+            if (!password_verify($inputOtp, trim($ride['otp']))) {
+                Response::json([
+                    "status" => "error",
+                    "message" => "Security verification failed: Invalid ride OTP code provided."
+                ], 401);
+                $db->rollBack();
+                return;
+            }
+
+            // 2. State Transition: Advance the ride lifecycle state to 'started'
+            $updateRide = "UPDATE rides SET ride_status = 'started' WHERE id = :ride_id";
+            $rideStmt = $db->prepare($updateRide);
+            $rideStmt->execute([':ride_id' => $rideId]);
+
+            $db->commit();
+
+            Response::json([
+                "status" => "success",
+                "message" => "OTP verified successfully. Journey state transitioned to STARTED."
+            ]);
+
+        } catch (\PDOException $e) {
+            $db->rollBack();
+            Response::json([
+                "status" => "error",
+                "message" => "Cryptographic validation engine failure: " . $e->getMessage()
             ], 500);
         }
     }
