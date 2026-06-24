@@ -28,7 +28,7 @@ $controller = new \App\Controllers\RiderController();
 // Safe dummy data for our terminal run
 $mockInputData = [
     "mobile" => "1234567890",
-    "password" => "Example123"
+    "password" => "Example1"
 ];
 
 $controller->login($mockInputData);
