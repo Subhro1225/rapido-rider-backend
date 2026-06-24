@@ -181,4 +181,73 @@ class RiderController {
             ], 500);
         }
     }
+    
+    public function updateRideStatus($data) {
+        $rideId = $data['ride_id'] ?? '';
+        $nextStatus = $data['next_status'] ?? ''; // Expecting: 'driver_arrived', 'started', or 'completed'
+
+        $allowedStatuses = ['driver_arrived', 'started', 'completed'];
+
+        if (empty($rideId) || !in_array($nextStatus, $allowedStatuses)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Invalid target status or missing Ride ID."
+            ], 400);
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            // Fetch the current status to validate state machine rules
+            $checkQuery = "SELECT ride_status FROM rides WHERE id = :ride_id LIMIT 1";
+            $checkStmt = $db->prepare($checkQuery);
+            $checkStmt->execute([':ride_id' => $rideId]);
+            $ride = $checkStmt->fetch();
+
+            if (!$ride) {
+                Response::json([
+                    "status" => "error",
+                    "message" => "Ride transaction records not found."
+                ], 404);
+                return;
+            }
+
+            $currentStatus = $ride['ride_status'];
+
+            // Enforce sequential business rules
+            if ($nextStatus === 'driver_arrived' && $currentStatus !== 'accepted') {
+                Response::json(["status" => "error", "message" => "Cannot mark arrived unless trip is accepted."], 400);
+                return;
+            }
+            if ($nextStatus === 'started' && $currentStatus !== 'driver_arrived') {
+                Response::json(["status" => "error", "message" => "Cannot start ride before driver arrives."], 400);
+                return;
+            }
+            if ($nextStatus === 'completed' && $currentStatus !== 'started') {
+                Response::json(["status" => "error", "message" => "Cannot complete a ride that hasn't started."], 400);
+                return;
+            }
+
+            // Execute the valid state update
+            $query = "UPDATE rides SET ride_status = :next_status WHERE id = :ride_id";
+            $stmt = $db->prepare($query);
+            $stmt->execute([
+                ':next_status' => $nextStatus,
+                ':ride_id' => $rideId
+            ]);
+
+            Response::json([
+                "status" => "success",
+                "message" => "Ride state advanced to tracking phase: " . $nextStatus,
+                "ride_id" => $rideId,
+                "ride_status" => $nextStatus
+            ]);
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Lifecycle mutation failed: " . $e->getMessage()
+            ], 500);
+        }
+    }
 }
