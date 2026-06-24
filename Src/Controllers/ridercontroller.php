@@ -480,5 +480,71 @@ class RiderController {
             ], 500);
         }
     }
+
+    public function getNearbyRides($data) {
+        $driverId = $data['driver_id'] ?? '';
+        $driverLat = $data['latitude'] ?? '';
+        $driverLng = $data['longitude'] ?? '';
+        $radiusKm = 5.0; // Enforce strict 5km range threshold
+
+        if (empty($driverId) || empty($driverLat) || empty($driverLng)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Driver ID, current latitude, and longitude are required for proximity pooling."
+            ], 400);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            // 1. First verify driver is active and online
+            $checkQuery = "SELECT is_online FROM drivers WHERE id = :driver_id LIMIT 1";
+            $checkStmt = $db->prepare($checkQuery);
+            $checkStmt->execute([':driver_id' => $driverId]);
+            $driver = $checkStmt->fetch();
+
+            if (!$driver || !$driver['is_online']) {
+                Response::json([
+                    "status" => "error",
+                    "message" => "Driver must toggle availability status to ONLINE to poll nearby requests."
+                ], 403);
+                return;
+            }
+
+            // 2. MySQL Haversine Formula query to calculate distance using your exact table columns
+            $query = "SELECT id, pickup_location, destination, fare, pickup_latitude, pickup_longitude,
+                      (6371 * acos(
+                          cos(radians(:driver_lat)) * cos(radians(pickup_latitude)) * cos(radians(pickup_longitude) - radians(:driver_lng)) + 
+                          sin(radians(:driver_lat)) * sin(radians(pickup_latitude))
+                      )) AS distance 
+                      FROM rides 
+                      WHERE ride_status = 'waiting' 
+                      HAVING distance <= :radius 
+                      ORDER BY distance ASC";
+
+            $stmt = $db->prepare($query);
+            $stmt->execute([
+                ':driver_lat' => $driverLat,
+                ':driver_lng' => $driverLng,
+                ':radius' => $radiusKm
+            ]);
+
+            $rides = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            Response::json([
+                "status" => "success",
+                "message" => "Proximity scan complete. Found " . count($rides) . " ride requests within " . $radiusKm . "km.",
+                "search_radius_km" => $radiusKm,
+                "rides" => $rides
+            ]);
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Geospatial engine calculation failure: " . $e->getMessage()
+            ], 500);
+        }
+    }
     
 }
