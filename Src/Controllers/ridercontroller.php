@@ -181,7 +181,7 @@ class RiderController {
             ], 500);
         }
     }
-    
+
     public function updateRideStatus($data) {
         $rideId = $data['ride_id'] ?? '';
         $nextStatus = $data['next_status'] ?? ''; // Expecting: 'driver_arrived', 'started', or 'completed'
@@ -247,6 +247,75 @@ class RiderController {
             Response::json([
                 "status" => "error",
                 "message" => "Lifecycle mutation failed: " . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function settleRidePayment($data) {
+        $rideId = $data['ride_id'] ?? '';
+        $paymentMethod = $data['payment_method'] ?? 'cash'; // Default to cash if not specified
+
+        if (empty($rideId)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Ride ID parameter is required for payment processing."
+            ], 400);
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            // 1. Verify the ride exists and is fully completed
+            $rideQuery = "SELECT id, fare, ride_status FROM rides WHERE id = :ride_id LIMIT 1";
+            $rideStmt = $db->prepare($rideQuery);
+            $rideStmt->execute([':ride_id' => $rideId]);
+            $ride = $rideStmt->fetch();
+
+            if (!$ride) {
+                Response::json(["status" => "error", "message" => "Ride record not found."], 404);
+                return;
+            }
+
+            if ($ride['ride_status'] !== 'completed') {
+                Response::json([
+                    "status" => "error", 
+                    "message" => "Payment processing rejected. Ride state must be 'completed' first."
+                ], 400);
+                return;
+            }
+
+            // 2. Check if a payment transaction has already been logged for this ride
+            $payCheckQuery = "SELECT id FROM payments WHERE ride_id = :ride_id LIMIT 1";
+            $payCheckStmt = $db->prepare($payCheckQuery);
+            $payCheckStmt->execute([':ride_id' => $rideId]);
+            
+            if ($payCheckStmt->fetch()) {
+                Response::json(["status" => "error", "message" => "Payment for this ride has already been settled."], 409);
+                return;
+            }
+
+            // 3. Process the payout injection into the payments ledger
+            $insertQuery = "INSERT INTO payments (ride_id, amount, payment_status, payment_method, created_at) 
+                            VALUES (:ride_id, :amount, 'success', :payment_method, NOW())";
+            $insertStmt = $db->prepare($insertQuery);
+            $insertStmt->execute([
+                ':ride_id' => $rideId,
+                ':amount' => $ride['fare'],
+                ':payment_method' => $paymentMethod
+            ]);
+
+            Response::json([
+                "status" => "success",
+                "message" => "Payment transaction settled successfully.",
+                "ride_id" => $rideId,
+                "earnings_realized" => $ride['fare'],
+                "payment_status" => "success"
+            ]);
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Payment transaction execution failed: " . $e->getMessage()
             ], 500);
         }
     }
