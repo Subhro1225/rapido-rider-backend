@@ -30,7 +30,7 @@ class RiderController {
 
             // 4. Verify user credentials match
             // 4. Verify user credentials match safely
-        if ($user && isset($user['password']) && $password === $user['password']) {
+        if ($user && password_verify($password, $user['password'])) {
             Response::json([
                 "status" => "success",
                 "message" => "Authentication successful!",
@@ -133,30 +133,33 @@ class RiderController {
         $driverId = $data['driver_id'] ?? '';
 
         if (empty($rideId) || empty($driverId)) {
-            Response::json([
-                "status" => "error",
-                "message" => "Ride ID and Driver ID parameters are required."
-            ], 400);
+            Response::json(["status" => "error", "message" => "Ride ID and Driver ID parameters are required."], 400);
+            return;
         }
 
         try {
             $db = Database::getInstance();
 
-            // First, verify the ride is still 'waiting' so two drivers can't accept the same ride
-            $checkQuery = "SELECT ride_status FROM rides WHERE id = :ride_id LIMIT 1";
+            // Begin the atomic database transaction safety net
+            $db->beginTransaction();
+
+            // 1. Lock the specific row for updates to prevent race conditions (FOR UPDATE)
+            $checkQuery = "SELECT ride_status FROM rides WHERE id = :ride_id LIMIT 1 FOR UPDATE";
             $checkStmt = $db->prepare($checkQuery);
             $checkStmt->execute([':ride_id' => $rideId]);
             $ride = $checkStmt->fetch();
 
             if (!$ride || $ride['ride_status'] !== 'waiting') {
+                // Cancel transaction and release locks gracefully
+                $db->rollBack();
                 Response::json([
                     "status" => "error",
                     "message" => "This ride request is no longer available or has already been accepted."
-                ], 409); // 409 Conflict
+                ], 409);
                 return;
             }
 
-            // Update the ride status and assign the driver_id
+            // 2. Execute the state mutation
             $query = "UPDATE rides 
                       SET ride_status = 'accepted', driver_id = :driver_id 
                       WHERE id = :ride_id AND ride_status = 'waiting'";
@@ -167,6 +170,9 @@ class RiderController {
                 ':ride_id' => $rideId
             ]);
 
+            // If everything executes flawlessly, commit all changes permanently to disk
+            $db->commit();
+
             Response::json([
                 "status" => "success",
                 "message" => "Ride successfully accepted and assigned to driver.",
@@ -175,9 +181,13 @@ class RiderController {
             ]);
 
         } catch (\PDOException $e) {
+            // Revert database back to its exact pre-request state on any exception
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
             Response::json([
                 "status" => "error",
-                "message" => "Database update failed: " . $e->getMessage()
+                "message" => "Transaction failed, safely rolled back: " . $e->getMessage()
             ], 500);
         }
     }

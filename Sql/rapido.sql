@@ -1,9 +1,11 @@
+
+
 -- phpMyAdmin SQL Dump
 -- version 5.2.1
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 24, 2026 at 11:12 AM
+-- Generation Time: Jun 24, 2026 at 11:23 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -153,9 +155,10 @@ ALTER TABLE `payments`
 --
 ALTER TABLE `rides`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `fk_ride_driver` (`driver_id`),
   ADD KEY `idx_rides_user_id` (`user_id`),
-  ADD KEY `idx_rides_ride_status` (`ride_status`);
+  ADD KEY `idx_rides_ride_status` (`ride_status`),
+  ADD KEY `idx_ride_status` (`ride_status`),
+  ADD KEY `idx_driver_status` (`driver_id`,`ride_status`);
 
 --
 -- Indexes for table `users`
