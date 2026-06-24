@@ -44,3 +44,9 @@ All server outputs must route through the central Response::json() helper to gua
     "message": "Explicit description text detailing exact execution result details."
 }
 ```
+---
+
+## 🔒 Rule 6: Automated Availability Concurrency Lifecycle
+* When a driver invokes `acceptRide()`, the system must instantly set `is_online = 0` inside the same database transaction block. This ensures they are immediately removed from open pooling visibility.
+* When a driver invokes `completeRide()`, the system must automatically flip `is_online = 1` back to true, returning them safely to the available pooling queue. 
+* Manual overrides to availability via `toggleAvailability()` are strictly forbidden unless the driver holds a verified active registration row in the database.

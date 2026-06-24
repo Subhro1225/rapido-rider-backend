@@ -29,32 +29,35 @@ DB_PASS=
 ## 💻 Local Terminal Test Runner Execution
 You can simulate the entire functional ride application directly from your terminal panel using your local PHP engine path without a web server:
 
-### 1. Verify Database Connectivity Basics
+### 1. Test Driver Signup/Registration Engine
+C:\xampp\php\php.exe Test/test_signup_flow.php
+
+### 2. Verify Database Connectivity Basics
 C:\xampp\php\php.exe Test/test_db.php
 
-### 2. Test Driver Authentication Engine
+### 3. Test Driver Authentication Engine
 C:\xampp\php\php.exe Test/test_login_flow.php
 
-### 3. Toggle Driver Online/Offline Availability
+### 4. Toggle Driver Online/Offline Availability
 C:\xampp\php\php.exe Test/test_availability_flow.php
 
-### 4. Poll Live Available Ride-Requests
+### 5. Poll Live Available Ride-Requests
 C:\xampp\php\php.exe Test/test_polling_flow.php
 
-### 5. Test Atomic Concurrent Ride Acceptance
+### 6. Test Atomic Concurrent Ride Acceptance
 C:\xampp\php\php.exe Test/test_accept_flow.php
 
-### 6. Progress Active Ride States (Arrived, Started, Completed)
+### 7. Progress Active Ride States (Arrived, Started, Completed)
 C:\xampp\php\php.exe Test/test_lifecycle_flow.php
 
-### 7. Settle and Process Payout Ledger Entries
+### 8. Settle and Process Payout Ledger Entries
 C:\xampp\php\php.exe Test/test_payment_flow.php
 
-### 8. View Aggregated Driver Earnings & Lifetime Analytics
+### 9. View Aggregated Driver Earnings & Lifetime Analytics
 C:\xampp\php\php.exe Test/test_driver_analytics_flow.php
 
-### 9. Stream Live Coordinate Refresh Telemetry
+### 10. Stream Live Coordinate Refresh Telemetry
 C:\xampp\php\php.exe Test/test_location_flow.php
 
-### 10. Test Routing and Core API Mechanics
+### 11. Test Routing and Core API Mechanics
 C:\xampp\php\php.exe Test/test_api_flow.php

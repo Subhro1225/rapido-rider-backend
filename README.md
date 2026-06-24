@@ -27,6 +27,7 @@ rapido-rider-backend/
 │       ├── response.php            # Centralized JSON response normalization tool
 │       └── router.php              # Centralized route handling and core gateway
 ├── Test/
+│   ├── test_signup_flow.php        # Simulates secure Bcrypt new account registration
 │   ├── test_accept_flow.php        # CLI atomic transaction ride claim script
 │   ├── test_api_flow.php           # Local API routing execution tester
 │   ├── test_availability_flow.php  # CLI driver availability toggle test script
