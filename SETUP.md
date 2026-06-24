@@ -61,3 +61,6 @@ C:\xampp\php\php.exe Test/test_location_flow.php
 
 ### 11. Test Routing and Core API Mechanics
 C:\xampp\php\php.exe Test/test_api_flow.php
+
+### 12. Test 5KM Proximity Geospatial Range Filter
+C:\xampp\php\php.exe Test/test_range_flow.php

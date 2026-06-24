@@ -50,3 +50,9 @@ All server outputs must route through the central Response::json() helper to gua
 * When a driver invokes `acceptRide()`, the system must instantly set `is_online = 0` inside the same database transaction block. This ensures they are immediately removed from open pooling visibility.
 * When a driver invokes `completeRide()`, the system must automatically flip `is_online = 1` back to true, returning them safely to the available pooling queue. 
 * Manual overrides to availability via `toggleAvailability()` are strictly forbidden unless the driver holds a verified active registration row in the database.
+
+---
+
+## 🗺️ Rule 7: Geospatial Coordinate Calculations
+* Every ride request record must explicitly include valid `pickup_latitude` and `pickup_longitude` values utilizing decimal data types to prevent structural rounding errors.
+* The matching pooling engine utilizes a standard spherical Haversine formula calculation. Changes to the core $6371\text{ km}$ Earth radius constant or the strict $5.0\text{ km}$ search threshold must pass architectural approval before deployment.

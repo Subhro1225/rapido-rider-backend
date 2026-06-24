@@ -30,6 +30,7 @@ rapido-rider-backend/
 │   ├── test_signup_flow.php        # Simulates secure Bcrypt new account registration
 │   ├── test_accept_flow.php        # CLI atomic transaction ride claim script
 │   ├── test_api_flow.php           # Local API routing execution tester
+│   ├── test_range_flow.php         # Evaluates 5KM geospatial proximity range filters using Haversine
 │   ├── test_availability_flow.php  # CLI driver availability toggle test script
 │   ├── test_db.php                 # Direct PDO connectivity validation check
 │   ├── test_driver_analytics_flow.php # Cross-table metrics generation script
