@@ -1,65 +1,88 @@
-# Rapido Clone — Rider Backend Module
+# Rapido Rider Backend Architecture
 
-## Module Purpose
-The Rider Backend Module serves as the centralized orchestration engine managing the lifecycle, authentication, and state synchronization of service providers (drivers/riders) within the Rapido Clone ecosystem. Built as a decoupled, zero-framework REST API platform in pure PHP 8, this module implements a strict Model-View-Controller (MVC) separation to process driver operational states, profile verifications, and relational database records safely via MySQL 8.
+A high-performance, transaction-safe, and decoupled vanilla PHP backend core designed to manage the real-time lifecycle of a ride-hailing system. This module isolates the entire transactional matrix of a driver application using a lightweight command-line verification framework.
 
-## Prerequisites
-- **PHP Runtime Engine:** Version 8.0 or higher
-- **Relational Database:** MySQL 8.0 / MariaDB
-- **Web Server Layer:** Apache Server (deployed via XAMPP, WAMP, or local compilation stacks)
+---
 
-## Setup & Deployment Steps
-1. **Repository Deployment:** Clone this codebase into your web server’s primary deployment path (e.g., `C:\xampp\htdocs\rapido-rider-backend`).
-2. **Database Engine Initialization:** Open phpMyAdmin, create a target schema named `rapido`, and ensure the relational tables (`drivers`, `users`, `rides`, `payments`) are active.
-3. **Environment Security Configuration:** Initialize a local environment file named `.env` in the root directory. Using the structure provided in `env.sample`, fill in your local system parameters.
-4. **Isolated Test Execution:** Verify database connectivity and autoload configurations from your terminal before exposing endpoints to the web server:
-   C:\xampp\php\php.exe Test/test_login_flow.php
+## 🛠️ Core Architecture & Design Patterns
+* **Singleton Database Provider:** Enforces a single, centralized database instance using a PDO wrapper to optimize connection reusability and completely prevent memory leaks.
+* **ACID-Compliant State Machine:** Leverages atomic database transactions (`beginTransaction`, `commit`, `rollBack`) paired with row-level concurrency locking (`FOR UPDATE`) to eliminate multi-driver race conditions during ride acceptance.
+* **Decoupled CLI Engine:** Designed with a zero-dependency environment context, allowing pure functional execution and unit tracking entirely through local terminal scripts.
 
-## Core API Specification Matrix
+## 📂 Repository Directory Layout
+rapido-rider-backend/
+├── Config/
+│   └── database.php                # Singleton PDO DB connector & .env reader
+├── public/
+│   ├── assets/                     # Static frontend/public assets
+│   └── .htaccess                   # Apache server rewrite & configuration rules
+├── Sql/
+│   └── rapido.sql                  # Database schema exports & structural backups
+├── Src/
+│   ├── Controllers/
+│   │   └── ridercontroller.php     # Core driver operational & transactional methods
+│   └── Core/
+│       ├── request.php             # Dynamic HTTP request capturing utility
+│       ├── response.php            # Centralized JSON response normalization tool
+│       └── router.php              # Centralized route handling and core gateway
+├── Test/
+│   ├── test_accept_flow.php        # CLI atomic transaction ride claim script
+│   ├── test_api_flow.php           # Local API routing execution tester
+│   ├── test_availability_flow.php  # CLI driver availability toggle test script
+│   ├── test_db.php                 # Direct PDO connectivity validation check
+│   ├── test_driver_analytics_flow.php # Cross-table metrics generation script
+│   ├── test_lifecycle_flow.php     # CLI active ride state step validator
+│   ├── test_location_flow.php      # CLI geospatial update telemetry tester
+│   ├── test_login_flow.php         # CLI authentication testing engine
+│   ├── test_payment_flow.php       # CLI transaction settlement injection tool
+│   └── test_polling_flow.php       # CLI ride availability queue scanner
+├── .env                            # Active local environmental credentials
+├── .gitignore                      # Git path tracking exclusions
+├── env.sample                      # Template configuration example
+├── CONTRIBUTING.md                 # Strict engineering guidelines & coding rules
+└── SETUP.md                        # Environment initialization instructions
 
-| Method | Target Routing Endpoint | Functional Overview | Access Control |
-|---|---|---|---|
-| POST | /api/user/login | Validates driver identity via unique mobile tracking and passwords. | Public |
+---
 
-*Note: All data-mutating endpoints expect a transmission header containing Content-Type: application/json.*
+## 📊 Database Schema Blueprint
+The underlying persistence layer relies on optimized MySQL tables with structural relationships and indexing:
 
-## Standardized JSON Exception Framework
-All runtime execution failures, verification anomalies, or structural payload errors intercept the response stack to return appropriate HTTP Status Codes (e.g., 400, 401, 500) alongside a uniform, machine-readable JSON structure:
+* **`drivers`**: Manages authentication tokens, real-time online availability states, and live geospatial coordinate streaming.
+* **`rides`**: Tracks ride pricing, active driver assignment matrix, and the sequential lifecycle states (`waiting`, `accepted`, `driver_arrived`, `started`, `completed`).
+* **`payments`**: Acts as a financial ledger capturing immutable records linked strictly to finalized rides.
 
-{
-  "status": "error",
-  "message": "A precise string describing the runtime exception context."
-}
+---
 
-## Security & Architecture Protocols
-- **Parameterized Queries:** To completely neutralize SQL Injection (SQLi) attack vectors, all database communication layers run exclusively via PDO Prepared Statements utilizing explicit parameter binding.
-- **Environment Isolation:** To prevent credential leakage across open-source code hosting infrastructure, all cryptographic keys, database secrets, and structural environment settings are stored locally in the git-ignored .env file.
-- **Case-Sensitive Autoloading:** The execution engine conforms to rigid Unix-style directory mapping rules. Directories (Src, Controllers, Core) must preserve exact case-matching rules across all namespace routing targets to prevent deployment crashes.
+## 🚀 Production Optimizations & Security
+* **Cryptographic Authentication:** Replaced insecure plain-text database comparisons with industry-standard **Bcrypt cryptographic hashing** via native PHP validation.
+* **High-Frequency Query Indexing:** Applied composite B-Tree database indexes (`idx_ride_status`, `idx_driver_status`) in MySQL to scale up live ride polling queues and eliminate heavy full-table scans.
 
-----------------------------------------------------------------------------------------------------
+---
 
-# Rapido Clone - Rider Management System
+## 📌 System Engineering Progress Checkpoints
 
-An isolated, zero-dependency service provider management engine built natively to handle high-concurrency ride allocation tracking tasks.
-
-## Technical Architecture Boundaries
-- **Language Runtime:** PHP 8.x (Strict typing enabled, native OOP, PDO Data Abstraction Layer)
-- **Storage Engine:** MySQL 8.x (Transactional InnoDB engine, strict utf8mb4_unicode_ci charsets)
-- **Design Pattern Constraints:** Pure vanilla implementation. Framework abstraction layers (Laravel, Symfony), external Object-Relational Mappers (ORMs), or node-package dependencies are strictly prohibited.
-
-## System Engineering Progress Checkpoints
-- [x] Milestone 1: Relational Database Normalization Schema Setup (rapido)
+### Phase 1: Core Architecture Foundations
+- [x] Milestone 1: Relational Database Normalization Schema Setup
 - [x] Milestone 2: Singleton Architecture Implementation for Centralized Database Access Control
 - [x] Milestone 3: Isolated CLI Verification Engine & Continuous Local Test Framework
-- [x] Milestone 4: Parameterized Rider Authentication Controller Logic (mobile/password validation)
+
+### Phase 2: Transactional & Lifecycle Logic
+- [x] Milestone 4: Parameterized Rider Authentication Controller Logic (Bcrypt Validation)
 - [x] Milestone 5: Live Ride-Request Polling Engine Logic (Fetching available trips)
-- [x] Milestone 6: Atomic Ride Acceptance & Driver Allocation State Matrix
+- [x] Milestone 6: Atomic Ride Acceptance & Driver Allocation State Matrix (Race-Condition Proof)
 - [x] Milestone 7: Sequential Ride Lifecycle State Transitions (Arrived, Started, Completed)
-- [x] Milestone 8: Ride Earnings Realization & Payment Settlement Engine
+
+### Phase 3: Financial Settlement & Analytics
+- [x] Milestone 8: Ride Earnings Realization & Payment Settlement Engine (State-Locked)
 - [x] Milestone 9: Cross-Table Driver Earnings & Completed Trips Analytics Engine
 - [x] Milestone 10: Live Geospatial Coordinate Refresh Tracking Engine
 
-## 🚀 Production Optimizations & Security Enhancements
-- **ACID-Compliant Transactions:** Integrated atomic PDO database transactions (`beginTransaction`, `commit`, `rollBack`) with row-level concurrency locking (`FOR UPDATE`) on critical states like ride acceptance to completely eliminate multi-driver race conditions.
-- **High-Frequency Query Indexing:** Applied database optimization indexes (`idx_ride_status`, `idx_driver_status`) in MySQL to scale up live pooling performance and prevent performance-heavy Full Table Scans.
-- **Cryptographic Authentication:** Swapped out insecure plain-text database comparisons for secure, industry-standard **Bcrypt cryptographic hashing** validation via native PHP security frameworks.
+---
+
+## 📄 Documentation Matrix
+For deeper operational details, refer to these standalone modules:
+
+1. **[Local Environment Setup & Installation Guide](SETUP.md)**
+2. **[Engineering Rules & Contribution Standards](CONTRIBUTION.md)**
+
+
