@@ -10,6 +10,7 @@ A high-performance, transaction-safe, and decoupled vanilla PHP backend core des
 * **Decoupled CLI Engine:** Designed with a zero-dependency environment context, allowing pure functional execution and unit tracking entirely through local terminal scripts.
 
 ## 📂 Repository Directory Layout
+```text
 rapido-rider-backend/
 ├── Config/
 │   └── database.php                # Singleton PDO DB connector & .env reader
@@ -41,7 +42,7 @@ rapido-rider-backend/
 ├── env.sample                      # Template configuration example
 ├── CONTRIBUTING.md                 # Strict engineering guidelines & coding rules
 └── SETUP.md                        # Environment initialization instructions
-
+```
 ---
 
 ## 📊 Database Schema Blueprint

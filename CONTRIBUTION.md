@@ -38,7 +38,9 @@ $envPath = ROOT_DIR . '/.env';
 ## 💬 Rule 5: Normalized JSON API Schema Output
 All server outputs must route through the central Response::json() helper to guarantee cross-system uniformity. Every single endpoint payload must contain an explicit tracking string status:
 
+```json
 {
     "status": "success/error",
     "message": "Explicit description text detailing exact execution result details."
 }
+```
