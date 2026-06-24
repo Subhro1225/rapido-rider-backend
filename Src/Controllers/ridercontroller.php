@@ -127,4 +127,58 @@ class RiderController {
             ], 500);
         }
     }
+
+    public function acceptRide($data) {
+        $rideId = $data['ride_id'] ?? '';
+        $driverId = $data['driver_id'] ?? '';
+
+        if (empty($rideId) || empty($driverId)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Ride ID and Driver ID parameters are required."
+            ], 400);
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            // First, verify the ride is still 'waiting' so two drivers can't accept the same ride
+            $checkQuery = "SELECT ride_status FROM rides WHERE id = :ride_id LIMIT 1";
+            $checkStmt = $db->prepare($checkQuery);
+            $checkStmt->execute([':ride_id' => $rideId]);
+            $ride = $checkStmt->fetch();
+
+            if (!$ride || $ride['ride_status'] !== 'waiting') {
+                Response::json([
+                    "status" => "error",
+                    "message" => "This ride request is no longer available or has already been accepted."
+                ], 409); // 409 Conflict
+                return;
+            }
+
+            // Update the ride status and assign the driver_id
+            $query = "UPDATE rides 
+                      SET ride_status = 'accepted', driver_id = :driver_id 
+                      WHERE id = :ride_id AND ride_status = 'waiting'";
+            
+            $stmt = $db->prepare($query);
+            $stmt->execute([
+                ':driver_id' => $driverId,
+                ':ride_id' => $rideId
+            ]);
+
+            Response::json([
+                "status" => "success",
+                "message" => "Ride successfully accepted and assigned to driver.",
+                "ride_id" => $rideId,
+                "driver_id" => $driverId
+            ]);
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Database update failed: " . $e->getMessage()
+            ], 500);
+        }
+    }
 }
