@@ -90,4 +90,41 @@ class RiderController {
             ], 500);
         }
     }
+
+    public function getAvailableRides() {
+        try {
+            $db = Database::getInstance();
+
+            // Query to find all rides currently waiting for a driver allocation
+            $query = "SELECT id, user_id, pickup_location, destination, fare, ride_status 
+                      FROM rides 
+                      WHERE ride_status = 'waiting' 
+                      ORDER BY id DESC";
+            
+            $stmt = $db->prepare($query);
+            $stmt->execute();
+            $rides = $stmt->fetchAll();
+
+            if (!empty($rides)) {
+                Response::json([
+                    "status" => "success",
+                    "count" => count($rides),
+                    "rides" => $rides
+                ]);
+            } else {
+                Response::json([
+                    "status" => "success",
+                    "count" => 0,
+                    "message" => "No available ride requests at the moment.",
+                    "rides" => []
+                ]);
+            }
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Database fetch failed: " . $e->getMessage()
+            ], 500);
+        }
+    }
 }

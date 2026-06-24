@@ -48,7 +48,9 @@ An isolated, zero-dependency service provider management engine built natively t
 - **Design Pattern Constraints:** Pure vanilla implementation. Framework abstraction layers (Laravel, Symfony), external Object-Relational Mappers (ORMs), or node-package dependencies are strictly prohibited.
 
 ## System Engineering Progress Checkpoints
-- [ ] Milestone 1: Relational Database Normalization Schema Setup (rapido)
-- [ ] Milestone 2: Singleton Architecture Implementation for Centralized Database Access Control
-- [ ] Milestone 3: Isolated CLI Verification Engine & Continuous Local Test Framework
+- [x] Milestone 1: Relational Database Normalization Schema Setup (rapido)
+- [x] Milestone 2: Singleton Architecture Implementation for Centralized Database Access Control
+- [x] Milestone 3: Isolated CLI Verification Engine & Continuous Local Test Framework
 - [x] Milestone 4: Parameterized Rider Authentication Controller Logic (mobile/password validation)
+- [x] Milestone 5: Live Ride-Request Polling Engine Logic (Fetching available trips)
+- [ ] Milestone 6: Atomic Ride Acceptance & Driver Allocation State Matrix
