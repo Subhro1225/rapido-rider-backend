@@ -362,5 +362,50 @@ class RiderController {
             ], 500);
         }
     }
+
+    public function updateLocation($data) {
+        $driverId = $data['driver_id'] ?? '';
+        $latitude = $data['latitude'] ?? '';
+        $longitude = $data['longitude'] ?? '';
+
+        if (empty($driverId) || empty($latitude) || empty($longitude)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Missing parameters. Driver ID, latitude, and longitude are required."
+            ], 400);
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            // Update the geospatial data for the target driver
+            $query = "UPDATE drivers 
+                      SET latitude = :latitude, longitude = :longitude, updated_at = NOW() 
+                      WHERE id = :driver_id";
+            
+            $stmt = $db->prepare($query);
+            $stmt->execute([
+                ':latitude' => $latitude,
+                ':longitude' => $longitude,
+                ':driver_id' => $driverId
+            ]);
+
+            Response::json([
+                "status" => "success",
+                "message" => "Geospatial telemetry updated successfully.",
+                "driver_id" => $driverId,
+                "coordinates" => [
+                    "latitude" => $latitude,
+                    "longitude" => $longitude
+                ]
+            ]);
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Telemetry write failed: " . $e->getMessage()
+            ], 500);
+        }
+    }
     
 }

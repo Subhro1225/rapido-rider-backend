@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 24, 2026 at 09:56 AM
+-- Generation Time: Jun 24, 2026 at 11:12 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -34,15 +34,18 @@ CREATE TABLE `drivers` (
   `vehicle_number` varchar(50) NOT NULL,
   `is_available` tinyint(1) DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `password` varchar(8) NOT NULL
+  `password` varchar(8) NOT NULL,
+  `latitude` varchar(50) DEFAULT NULL,
+  `longitude` varchar(50) DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `drivers`
 --
 
-INSERT INTO `drivers` (`id`, `name`, `mobile`, `vehicle_number`, `is_available`, `created_at`, `password`) VALUES
-(1, 'Example', '1234567890', '', 0, '0000-00-00 00:00:00', 'Example1');
+INSERT INTO `drivers` (`id`, `name`, `mobile`, `vehicle_number`, `is_available`, `created_at`, `password`, `latitude`, `longitude`, `updated_at`) VALUES
+(1, 'Example', '1234567890', '', 1, '0000-00-00 00:00:00', 'Example1', '22.7796', '86.2343', '2026-06-24 09:07:46');
 
 -- --------------------------------------------------------
 
@@ -85,7 +88,7 @@ CREATE TABLE `rides` (
 
 INSERT INTO `rides` (`id`, `user_id`, `driver_id`, `pickup_location`, `destination`, `distance_km`, `fare`, `otp`, `ride_status`, `payment_status`, `created_at`) VALUES
 (1, 1, NULL, 'Telco Colony, Telco Colony, Jamshedpur, Jharkhand 831004', 'Telco Club & Sports Complex, Telco Club, Jamshedpur, Jharkhand 831004', 19.07, 258.84, '$2y$10$f3mFgQxWfIkMLuNMgEqaXeusdPs1FGz2ZVqhZbId.UVAPd5PxdGW6', 'waiting', 'pending', '2026-06-19 10:41:41'),
-(3, 1, NULL, 'Telco Colony, Telco Colony, Jamshedpur, Jharkhand 831004', 'Hudco Lake, Govindpur Road, Telco Colony, Jamshedpur 831004', 4.39, 82.68, '$2y$10$Rx1tkI2UZpJOMoy/CWigM.UMNKtgK0aR.aHmcN1wo3EOs87DC6dx2', 'waiting', 'pending', '2026-06-19 11:10:52');
+(3, 1, 1, 'Telco Colony, Telco Colony, Jamshedpur, Jharkhand 831004', 'Hudco Lake, Govindpur Road, Telco Colony, Jamshedpur 831004', 4.39, 82.68, '$2y$10$Rx1tkI2UZpJOMoy/CWigM.UMNKtgK0aR.aHmcN1wo3EOs87DC6dx2', 'driver_arrived', 'pending', '2026-06-19 11:10:52');
 
 -- --------------------------------------------------------
 
