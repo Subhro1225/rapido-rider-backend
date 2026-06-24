@@ -319,4 +319,48 @@ class RiderController {
             ], 500);
         }
     }
+
+    public function getDriverAnalytics($data) {
+        $driverId = $data['driver_id'] ?? '';
+
+        if (empty($driverId)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Driver ID parameter is required for analytics generation."
+            ], 400);
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            // Run an optimized aggregate join query to pull total trips and financial metrics
+            $query = "SELECT 
+                        COUNT(r.id) as total_completed_trips,
+                        IFNULL(SUM(p.amount), 0.00) as total_lifetime_earnings
+                      FROM rides r
+                      INNER JOIN payments p ON r.id = p.ride_id
+                      WHERE r.driver_id = :driver_id AND r.ride_status = 'completed'";
+            
+            $stmt = $db->prepare($query);
+            $stmt->execute([':driver_id' => $driverId]);
+            $analytics = $stmt->fetch();
+
+            Response::json([
+                "status" => "success",
+                "driver_id" => $driverId,
+                "performance_metrics" => [
+                    "completed_trips" => (int)$analytics['total_completed_trips'],
+                    "lifetime_earnings" => (float)$analytics['total_lifetime_earnings'],
+                    "currency" => "INR"
+                ]
+            ]);
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Analytics aggregation failed: " . $e->getMessage()
+            ], 500);
+        }
+    }
+    
 }
