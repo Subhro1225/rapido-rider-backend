@@ -3,6 +3,22 @@
 To keep the codebase reliable, clean, and bug-free, everyone working on this project must strictly adhere to these core development rules.
 
 ---
+# Method Reference Index (RiderController)
+
+| Function Name | Description | Status Code Outputs |
+| :--- | :--- | :--- |
+| `signup($data)` | Registers a new driver profile with secure password encryption. | `201 Created` / `409 Conflict` |
+| `login($data)` | Validates mobile credentials using secure hash matching. | `200 OK` / `401 Unauthorized` |
+| `toggleAvailability($data)` | Switches driver status to online/offline queues. | `200 OK` / `401 Unauthorized` |
+| `getAvailableRides()` | Fetches global feed of all unallocated ride bookings. | `200 OK` |
+| `getNearbyRides($data)` | Feeds rides strictly within a 5KM sphere of driver GPS. | `200 OK` / `403 Forbidden` |
+| `acceptRide($data)` | Secures a ride request using atomic transaction rows. | `200 OK` / `409 Conflict` |
+| `startRideWithOtp($data)` | Unlocks ride state to `started` via cryptographic matches. | `200 OK` / `401 Unauthorized` |
+| `completeRide($data)` | Finalizes journey status and toggles driver to available. | `200 OK` / `400 Bad Request` |
+| `settleRidePayment($data)` | Processes fares securely into ledger tables. | `200 OK` / `409 Conflict` |
+| `getDriverAnalytics($data)` | Generates trip counters and lifetime performance records. | `200 OK` |
+
+---
 
 ## 🛡️ Rule 1: Rigid State Machine Sequence
 The ride_status must transition strictly in chronological order. No exceptions. Any request attempting to skip a state must instantly return an HTTP 400 Bad Request or code validation failure:
