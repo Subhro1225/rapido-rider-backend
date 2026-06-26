@@ -74,6 +74,7 @@ function initializeApp() {
     }
 
     function switchScreen(screenId) {
+        console.log("Switching to:", screenId);
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
     }
@@ -88,6 +89,13 @@ function initializeApp() {
        ========================================================================== */
     function initOnboardingFlow() {
         const welcomeRegisterBtn = document.getElementById('btn-welcome-register');
+        const welcomeLoginBtn = document.getElementById("btn-welcome-login");
+
+        const loginOnlyScreen = document.getElementById("screen-login-only");
+        const loginOnlyPhoneInput = document.getElementById("login-only-phone");
+
+        const loginOnlyNextBtn = document.getElementById("login-only-next-btn");
+        const loginOnlyBackBtn = document.getElementById("btn-login-only-back");
         
         const loginNameInput = document.getElementById('login-name');
         const loginPhoneInput = document.getElementById('login-phone');
@@ -103,6 +111,19 @@ function initializeApp() {
 
         // Transition from Welcome Screen
         welcomeRegisterBtn.addEventListener('click', () => switchScreen('screen-login'));
+        welcomeLoginBtn.addEventListener("click", () => {
+
+            loginOnlyPhoneInput.value = "";
+
+            switchScreen("screen-login-only");
+
+        });
+
+            loginOnlyBackBtn.addEventListener("click", () => {
+
+            switchScreen("screen-welcome");
+
+        });
         backToWelcomeBtn.addEventListener('click', () => switchScreen('screen-welcome'));
 
         // Input validation for Registration Screen
