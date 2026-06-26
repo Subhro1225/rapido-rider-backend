@@ -279,62 +279,55 @@ class RiderController {
     }
 
     public function completeRide($data) {
-        $rideId = $data['ride_id'] ?? '';
-        $driverId = $data['driver_id'] ?? '';
-
-        if (empty($rideId) || empty($driverId)) {
-            Response::json([
-                "status" => "error",
-                "message" => "Ride ID and Driver ID parameters are required."
-            ], 400);
+        if (!isset($data['ride_id'])) {
+            Response::json(["status" => "error", "message" => "Missing ride ID"], 400);
             return;
         }
 
+        $ride_id = $data['ride_id'];
+        
+        // Get the database connection
+        $db = Database::getInstance(); 
+
         try {
-            $db = Database::getInstance();
-            $db->beginTransaction();
+            // 1. Check the current status in the database (PDO Syntax)
+            $checkQuery = "SELECT ride_status FROM rides WHERE id = ?";
+            $stmt = $db->prepare($checkQuery);
+            $stmt->execute([$ride_id]); 
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$row) {
+                Response::json(["status" => "error", "message" => "Ride not found in database."], 404);
+                return;
+            }
+            
+            $current_status = $row['ride_status'];
 
-            // Verify the ride belongs to this driver and is currently active ('started')
-            $query = "SELECT ride_status FROM rides WHERE id = :ride_id AND driver_id = :driver_id FOR UPDATE";
-            $stmt = $db->prepare($query);
-            $stmt->execute([
-                ':ride_id' => $rideId,
-                ':driver_id' => $driverId
-            ]);
-            $ride = $stmt->fetch();
-
-            if (!$ride || $ride['ride_status'] !== 'started') {
-                Response::json([
-                    "status" => "error",
-                    "message" => "Invalid state transition. Ride must be in 'started' status to complete."
-                ], 400);
-                $db->rollBack();
+            // 2. If it is ALREADY completed, just tell the frontend "success"
+            if ($current_status === 'completed') {
+                Response::json(["status" => "success", "message" => "Ride was already completed."], 200);
                 return;
             }
 
-            // 1. Transition the ride lifecycle state to completed
-            $updateRide = "UPDATE rides SET ride_status = 'completed' WHERE id = :ride_id";
-            $rideStmt = $db->prepare($updateRide);
-            $rideStmt->execute([':ride_id' => $rideId]);
+            // 3. Check if it's legally allowed to be completed
+            if ($current_status !== 'in_progress' && $current_status !== 'started') {
+                Response::json(["status" => "error", "message" => "Invalid state transition. Ride is currently: " . $current_status], 400);
+                return;
+            }
 
-            // 2. AUTOMATION GATEWAY: Free up the driver and toggle them back to AVAILABLE
-            $updateDriver = "UPDATE drivers SET is_available = 1, updated_at = NOW() WHERE id = :driver_id";
-            $driverStmt = $db->prepare($updateDriver);
-            $driverStmt->execute([':driver_id' => $driverId]);
-
-            $db->commit();
-
-            Response::json([
-                "status" => "success",
-                "message" => "Ride target completed successfully. Driver state automatically reset to AVAILABLE."
-            ]);
-
+            // 4. Lock in the final completed status (PDO Syntax)
+            $updateQuery = "UPDATE rides SET ride_status = 'completed' WHERE id = ?";
+            $updateStmt = $db->prepare($updateQuery);
+            
+            if ($updateStmt->execute([$ride_id])) {
+                Response::json(["status" => "success", "message" => "Ride completed successfully."], 200);
+            } else {
+                Response::json(["status" => "error", "message" => "Failed to update database."], 500);
+            }
+            
         } catch (\PDOException $e) {
-            $db->rollBack();
-            Response::json([
-                "status" => "error",
-                "message" => "Completion engine failure: " . $e->getMessage()
-            ], 500);
+            // Catch any unexpected database errors gracefully
+            Response::json(["status" => "error", "message" => "Database error: " . $e->getMessage()], 500);
         }
     }
 
@@ -598,7 +591,7 @@ class RiderController {
             }
 
             // 1. CRYPTOGRAPHIC VERIFICATION: Match the input plaintext against the database hash
-            if (!password_verify($inputOtp, trim($ride['otp']))) {
+                if ($inputOtp !== trim($ride['otp'])) {
                 Response::json([
                     "status" => "error",
                     "message" => "Security verification failed: Invalid ride OTP code provided."

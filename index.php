@@ -67,6 +67,25 @@ switch ($route) {
         }
         break;
 
+    case 'api/rides/start':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $data = json_decode(file_get_contents("php://input"), true);
+            $controller = new \App\Controllers\RiderController();
+            $controller->startRideWithOtp($data);
+            exit;
+        }
+        break;
+
+    case 'api/rides/complete':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $data = json_decode(file_get_contents("php://input"), true);
+            $controller = new \App\Controllers\RiderController();
+            // Pointing to your controller's complete method
+            $controller->completeRide($data); 
+            exit;
+        }
+        break;
+
     default:
         http_response_code(404);
 

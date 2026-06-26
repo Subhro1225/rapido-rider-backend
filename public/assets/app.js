@@ -597,6 +597,55 @@ function initializeApp() {
         }
     }
 
+    async function startRide() {
+        // Grab the OTP from your input field (adjust the ID if yours is named differently)
+        const otpInput = document.getElementById('ride-otp-input'); 
+        const enteredOtp = otpInput ? otpInput.value : "1234"; // Fallback to 1234 for testing if input is missing
+
+        if (!state.activeRide || !state.activeRide.request) {
+            console.error("Cannot start ride: No active ride found in state.");
+            return;
+        }
+
+        try {
+            console.log(`Sending OTP ${enteredOtp} for Ride ID ${state.activeRide.request.id}...`);
+            // 1. Send the OTP to the backend
+            const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/start", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ride_id: state.activeRide.request.id,
+                    driver_id: 1, // Added this because your PHP requires it!
+                    otp: enteredOtp
+                })
+            });
+            
+            const data = await response.json();
+            
+            // 2. Process backend response
+            if (data.status === "success") {
+                console.log("Backend confirmed: OTP Verified! Ride Started.");
+                
+                // Update app state
+                state.activeRide.state = 'en_route';
+                
+                // Update UI text and hide OTP box
+                document.getElementById('txt-nav-status').textContent = "Heading to Dropoff";
+                const otpContainer = document.getElementById('start-ride-otp-container');
+                if (otpContainer) otpContainer.classList.add('hidden');
+                
+                // Draw map route to destination
+                drawActiveRideRoute(state.activeRide.request.dropoff);
+                
+            } else {
+                alert("Failed to start ride: " + data.message);
+            }
+        } catch (error) {
+            console.error("Network error starting ride:", error);
+            alert("Network error connecting to backend.");
+        }
+    }
+
     function drawActiveRideRoute(destination) {
         if (!state.map) return;
 
@@ -667,7 +716,7 @@ function initializeApp() {
         }, 150);
     }
 
-    function handleWaypointArrival() {
+    async function handleWaypointArrival() {
         const ride = state.activeRide;
         if (!ride) return;
 
@@ -685,34 +734,53 @@ function initializeApp() {
             document.getElementById('start-ride-otp-container').classList.remove('hidden');
 
             // Listen for start ride verification
-            const verifyCodeBtn = actionBtn; // Action button serves as validator
+            const verifyCodeBtn = actionBtn; 
             
             // Clear old listener
             const newBtn = verifyCodeBtn.cloneNode(true);
             verifyCodeBtn.parentNode.replaceChild(newBtn, verifyCodeBtn);
 
-            newBtn.addEventListener('click', () => {
+            // BACKEND INJECTION #1: Start Ride with OTP
+            newBtn.addEventListener('click', async () => {
                 const enteredOtp = document.getElementById('input-start-ride-otp').value.trim();
                 const startError = document.getElementById('start-otp-error');
                 
-                if (enteredOtp === ride.request.startOtp) {
-                    // Correct OTP -> start trip navigating to dropoff
-                    startError.classList.add('hidden');
-                    document.getElementById('input-start-ride-otp').value = '';
+                try {
+                    const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/start", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            ride_id: ride.request.id,
+                            driver_id: 1, // Hardcoded for testing
+                            otp: enteredOtp
+                        })
+                    });
                     
-                    ride.state = 'dropoff';
-                    document.getElementById('txt-nav-status').textContent = "Ride in Progress";
-                    document.getElementById('start-ride-otp-container').classList.add('hidden');
-                    newBtn.textContent = "Navigate to Destination";
-                    newBtn.disabled = true; // disabled during navigation simulation
+                    const data = await response.json();
+                    
+                    if (data.status === "success") {
+                        // Backend confirmed! Correct OTP -> navigate to dropoff
+                        startError.classList.add('hidden');
+                        document.getElementById('input-start-ride-otp').value = '';
+                        
+                        ride.state = 'dropoff';
+                        document.getElementById('txt-nav-status').textContent = "Ride in Progress";
+                        document.getElementById('start-ride-otp-container').classList.add('hidden');
+                        newBtn.textContent = "Navigate to Destination";
+                        newBtn.disabled = true; // disabled during navigation simulation
 
-                    // Draw route to dropoff destination
-                    drawActiveRideRoute(ride.request.dropoff);
-                } else {
-                    // Incorrect OTP
-                    startError.classList.remove('hidden');
-                    document.getElementById('input-start-ride-otp').value = '';
-                    document.getElementById('input-start-ride-otp').focus();
+                        // Draw route to dropoff destination
+                        drawActiveRideRoute(ride.request.dropoff);
+                    } else {
+                        // Backend rejected OTP
+                        startError.textContent = data.message || "Invalid OTP code";
+                        startError.classList.remove('hidden');
+                        document.getElementById('input-start-ride-otp').value = '';
+                        document.getElementById('input-start-ride-otp').focus();
+                    }
+                } catch (error) {
+                    console.error("Error starting ride:", error);
+                    alert("Network error connecting to backend.");
                 }
             });
 
@@ -731,75 +799,82 @@ function initializeApp() {
             const newBtn = actionBtn.cloneNode(true);
             actionBtn.parentNode.replaceChild(newBtn, actionBtn);
 
-            newBtn.addEventListener('click', () => {
-                showFareCollection();
+            // BACKEND INJECTION #2: Complete the Ride
+            newBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/complete", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            ride_id: ride.request.id,
+                            driver_id: 1 // Hardcoded for testing
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.status === "success") {
+                        console.log("Database updated: Ride completed successfully!");
+                        // Show your existing fare collection UI!
+                        showFareCollection();
+                    } else {
+                        alert("Failed to complete ride on server: " + data.message);
+                    }
+                } catch (error) {
+                    console.error("Error completing ride:", error);
+                    alert("Network error connecting to backend.");
+                }
             });
         }
     }
-
-    /* ==========================================================================
-       FARE COLLECTION SCREEN & STATISTICS UPDATES
+       /* ==========================================================================
+       FARE COLLECTION & RIDE RESET (CRASH-PROOF VERSION)
        ========================================================================== */
     function showFareCollection() {
-        const ride = state.activeRide;
-        if (!ride) return;
-
-        // Hide navigation details, open fare collection panel
-        document.getElementById('active-navigation-widget').classList.add('hidden');
+        console.log("Triggering final fare collection UI...");
         
-        document.getElementById('fare-collected-amount').textContent = `₹${ride.request.payout + 10}`; // Payout + ₹10 Tip
-        document.getElementById('fare-breakdown-dist').textContent = `${ride.request.rideDistance} km`;
-        document.getElementById('fare-breakdown-payout').textContent = `₹${ride.request.payout}`;
-        document.getElementById('fare-breakdown-total').textContent = `₹${ride.request.payout + 10}`;
+        try {
+            // 1. Get the fare amount
+            const fare = state.activeRide && state.activeRide.request ? state.activeRide.request.payout : 150;
+            alert(`🎉 TRIP COMPLETED!\n\nPlease collect ₹${fare} from the passenger.`);
 
-        document.getElementById('fare-collection-widget').classList.remove('hidden');
+            // 2. Safely clear the map routes and markers
+            if (state.map && state.mapRouteLine) state.map.removeLayer(state.mapRouteLine);
+            if (state.map && state.passengerMarker) state.map.removeLayer(state.passengerMarker);
 
-        // Confirm button
-        const confirmBtn = document.getElementById('btn-complete-fare-done');
-        const newBtn = confirmBtn.cloneNode(true);
-        confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
-
-        newBtn.addEventListener('click', () => {
-            // Update stats
-            const totalCollected = ride.request.payout + 10;
-            state.earnings.today += totalCollected;
-            state.earnings.rides += 1;
-            
-            // Sync with weekly chart Fri value
-            state.weeklyEarnings.fri += totalCollected;
-
-            // Add completed ride to local History array
-            const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            state.history.unshift({
-                date: `Today, ${timeString}`,
-                payout: totalCollected,
-                pickupName: ride.request.pickup.name,
-                dropoffName: ride.request.dropoff.name
-            });
-
-            // Update UI elements
-            updateEarningsDisplay();
-            updateHistoryUI();
-
-            // Clear active markers & line
-            if (state.markers.pickup) state.map.removeLayer(state.markers.pickup);
-            if (state.markers.dropoff) state.map.removeLayer(state.markers.dropoff);
-            if (state.routePolyline) state.map.removeLayer(state.routePolyline);
-            state.markers.pickup = null;
-            state.markers.dropoff = null;
-            state.routePolyline = null;
-
-            // Reset Active Ride state
+            // 3. Reset the Captain's state
             state.activeRide = null;
-            updateDriverMarkerOnMap();
 
-            // Hide fare widget
-            document.getElementById('fare-collection-widget').classList.add('hidden');
-            logDebug("Fare collection completed. Back to Online state.");
+            // 4. Safely hide the active navigation panel (Checks if ID exists first!)
+            const navPanel = document.getElementById('active-navigation-widget');
+            if (navPanel) {
+                navPanel.classList.add('hidden');
+            } else {
+                console.warn("Could not find 'active-navigation-widget' to hide.");
+            }
+            
+            // 5. Safely reset the status text
+            const statusText = document.getElementById('txt-nav-status');
+            if (statusText) statusText.textContent = "Searching for passengers nearby...";
 
-            // Queue next mock ride request
-            triggerMockBookingLoop();
-        });
+            // 6. Safely reset the main action button
+            const actionBtn = document.getElementById('btn-navigation-action');
+            if (actionBtn) {
+                actionBtn.textContent = "Waiting for rides...";
+                actionBtn.disabled = true;
+            }
+
+            // 7. Put the Captain back on the market!
+            if (typeof triggerMockBookingLoop === "function") {
+                triggerMockBookingLoop();
+            }
+
+            console.log("UI successfully reset!");
+
+        } catch (error) {
+            console.error("CRASH DURING UI RESET:", error);
+            alert("Backend updated, but UI failed to reset. Check console for details.");
+        }
     }
 
     function updateEarningsDisplay() {
