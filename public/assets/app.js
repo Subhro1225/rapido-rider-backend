@@ -112,20 +112,62 @@ function initializeApp() {
         loginPlateInput.addEventListener('input', validateLoginFields);
 
         // Transition to OTP Screen
-        loginNextBtn.addEventListener('click', () => {
-            const nameVal = loginNameInput.value.trim();
-            const phoneVal = loginPhoneInput.value;
-            
+        loginNextBtn.addEventListener('click', async () => {
+
+    const nameVal = loginNameInput.value.trim();
+    const phoneVal = loginPhoneInput.value.trim();
+
+    // Basic validation
+    if (!nameVal || !phoneVal) {
+        alert("Please enter your name and mobile number.");
+        return;
+    }
+
+    try {
+
+        const response = await fetch(
+            "http://localhost/rapido-rider-backend/index.php?route=api/driver/signup",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    name: nameVal,
+                    mobile: phoneVal,
+                    password: "password123"
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (data.status === "success") {
+
             document.getElementById('otp-display-name').textContent = nameVal;
             document.getElementById('otp-display-phone').textContent = `+91 ${phoneVal}`;
-            
-            // Reset OTP credentials
+
+            // Reset OTP inputs
             otpErrorMsg.classList.add('hidden');
             otpInputs.forEach(input => input.value = '');
-            
+
             switchScreen('screen-otp');
             setTimeout(() => otpInputs[0].focus(), 400);
-        });
+
+        } else {
+
+            alert(data.message);
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+        alert("Unable to connect to the backend.");
+
+    }
+
+});
 
         backToLoginBtn.addEventListener('click', () => switchScreen('screen-login'));
 
