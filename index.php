@@ -58,6 +58,15 @@ switch ($route) {
         }
         break;
 
+    case 'api/rides/accept':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $data = json_decode(file_get_contents("php://input"), true);
+            $controller = new \App\Controllers\RiderController();
+            $controller->acceptRide($data);
+            exit;
+        }
+        break;
+
     default:
         http_response_code(404);
 

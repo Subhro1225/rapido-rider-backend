@@ -411,9 +411,50 @@ function initializeApp() {
     /* ==========================================================================
        INCOMING BOOKING REQUEST DIALOG
        ========================================================================== */
+    async function triggerMockBookingLoop() {
+        if (state.status !== "online" || state.activeRide || state.activeRequest) return;
+
+        try {
+            // 1. Fetch real rides from the database
+            const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/available");
+            const data = await response.json();
+
+            // 2. If we found a real ride waiting
+            if (data.status === "success" && data.count > 0) {
+                const realRide = data.rides[0]; // Grab the first available ride
+                console.log("Real ride found!", realRide);
+
+                // 3. Adapt the database row to fit your frontend UI perfectly
+                const adaptedReq = {
+                    id: realRide.id,
+                    passengerName: "Passenger #" + (realRide.user_id || "Unknown"),
+                    passengerRating: 4.8, 
+                    passengerAvatar: "👤",
+                    pickup: { name: realRide.pickup_location, address: realRide.pickup_location, lat: 22.7735, lng: 86.2505 }, 
+                    dropoff: { name: realRide.destination, address: realRide.destination, lat: 22.8015, lng: 86.1798 }, 
+                    payout: parseInt(realRide.fare) || 0,
+                    startOtp: "1234", // Hardcoded for now
+                    vehicle: state.driver.vehicleType
+                };
+
+                // Show the popup and stop looping!
+                showIncomingRequest(adaptedReq);
+                return; 
+            }
+        } catch (error) {
+            console.error("Error fetching real rides:", error);
+        }
+
+        // 4. Wait 5 seconds and check again
+        state.requestTimeout = setTimeout(triggerMockBookingLoop, 5000);
+    }
+
+    /* ==========================================================================
+       INCOMING BOOKING REQUEST DIALOG
+       ========================================================================== */
     function showIncomingRequest(req) {
         state.activeRequest = req;
-        logDebug(`Incoming request generated: ${req.id} from ${req.passengerName}`);
+        console.log(`Incoming request generated: ${req.id} from ${req.passengerName}`);
 
         // Update UI dialog contents
         document.getElementById('req-payout-amt').textContent = `₹${req.payout}`;
@@ -430,7 +471,7 @@ function initializeApp() {
             lucide.createIcons();
         }
 
-        // Play alert audio beep (simulated)
+        // Play alert audio beep
         beep();
 
         // 15 seconds countdown
@@ -462,7 +503,7 @@ function initializeApp() {
         const acceptBtn = document.getElementById('btn-request-accept');
         const declineBtn = document.getElementById('btn-request-decline');
 
-        // Clear previous listeners by replacing elements or cloning
+        // Clear previous listeners by replacing elements
         const newAccept = acceptBtn.cloneNode(true);
         const newDecline = declineBtn.cloneNode(true);
         acceptBtn.parentNode.replaceChild(newAccept, acceptBtn);
@@ -498,34 +539,62 @@ function initializeApp() {
     /* ==========================================================================
        ACTIVE NAVIGATION ROUTE SIMULATION STATE MACHINE
        ========================================================================== */
-    function acceptRequest(req) {
+    async function acceptRequest(req) {
         hideIncomingRequestOverlay();
-        logDebug(`Ride request accepted: ${req.id}`);
+        console.log(`Attempting to claim ride in database: ${req.id}`);
 
-        // Set navigation state
-        state.activeRide = {
-            request: req,
-            state: 'pickup', // pickup -> otp -> dropoff -> fare
-            routePoints: [],
-            routeIndex: 0
-        };
+        try {
+            // 1. Tell the backend we want to accept this ride
+            const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/accept", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ride_id: req.id,
+                    driver_id: 1 // Still hardcoded for testing
+                })
+            });
+            
+            const data = await response.json();
+            
+            // 2. If the backend locked it in successfully, update the UI
+            if (data.status === "success") {
+                console.log("Backend confirmed! Ride accepted.");
+                
+                // Set navigation state
+                state.activeRide = {
+                    request: req,
+                    state: 'pickup', // pickup -> otp -> dropoff -> fare
+                    routePoints: [],
+                    routeIndex: 0
+                };
 
-        // UI Widget populate
-        document.getElementById('txt-nav-status').textContent = "Heading to Pickup";
-        document.getElementById('nav-pulse-indicator').className = "nav-pulse-dot";
-        document.getElementById('nav-client-avatar').textContent = req.passengerAvatar;
-        document.getElementById('nav-client-name').textContent = req.passengerName;
-        document.getElementById('nav-client-rating').textContent = req.passengerRating;
-        document.getElementById('nav-pickup-address').textContent = req.pickup.address;
-        document.getElementById('nav-dropoff-address').textContent = req.dropoff.address;
-        document.getElementById('nav-hint-otp').textContent = req.startOtp;
+                // UI Widget populate
+                document.getElementById('txt-nav-status').textContent = "Heading to Pickup";
+                document.getElementById('nav-pulse-indicator').className = "nav-pulse-dot";
+                document.getElementById('nav-client-avatar').textContent = req.passengerAvatar;
+                document.getElementById('nav-client-name').textContent = req.passengerName;
+                document.getElementById('nav-client-rating').textContent = req.passengerRating;
+                document.getElementById('nav-pickup-address').textContent = req.pickup.address;
+                document.getElementById('nav-dropoff-address').textContent = req.dropoff.address;
+                document.getElementById('nav-hint-otp').textContent = req.startOtp;
 
-        // Hide inputs/stats panel and show active nav panel
-        document.getElementById('active-navigation-widget').classList.remove('hidden');
-        document.getElementById('start-ride-otp-container').classList.add('hidden');
+                // Hide inputs/stats panel and show active nav panel
+                document.getElementById('active-navigation-widget').classList.remove('hidden');
+                document.getElementById('start-ride-otp-container').classList.add('hidden');
 
-        // Draw Map markers and route to pickup
-        drawActiveRideRoute(req.pickup);
+                // Draw Map markers and route to pickup
+                drawActiveRideRoute(req.pickup);
+                
+            } else {
+                // If someone else claimed it first, or it failed
+                alert("Failed to accept ride: " + data.message);
+                triggerMockBookingLoop(); // Start searching again
+            }
+        } catch (error) {
+            console.error("Network error accepting ride:", error);
+            alert("Network error connecting to backend.");
+            triggerMockBookingLoop();
+        }
     }
 
     function drawActiveRideRoute(destination) {
