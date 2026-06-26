@@ -375,6 +375,25 @@ function initializeApp() {
                 document.getElementById('stat-hours').textContent = `${state.earnings.onlineTime.toFixed(1)}h`;
             }, 360000); // Ticks every 6 mins for 0.1 hour
             
+            async function fetchRealRidesFromBackend() {
+        try {
+            // Using the same URL structure you used for registration
+            const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/available");
+            const data = await response.json();
+            
+            if (data.status === "success") {
+                console.log("SUCCESS! Real rides from database:", data.rides);
+                return data.rides;
+            } else {
+                console.error("Backend returned an error:", data.message);
+                return null;
+            }
+        } catch (error) {
+            console.error("Network error fetching real rides:", error);
+            return null;
+        }
+    }
+
             // Start ride request loop
             triggerMockBookingLoop();
             logDebug("Captain is Online. Incoming loop started.");

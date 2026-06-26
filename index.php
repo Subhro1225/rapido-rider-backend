@@ -41,6 +41,14 @@ switch ($route) {
         $controller->login($inputData);
         break;
 
+    case 'api/rides/available':
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            $controller = new \App\Controllers\RiderController();
+            $controller->getAvailableRides();
+            exit;
+        }
+        break;
+
     default:
         http_response_code(404);
 
