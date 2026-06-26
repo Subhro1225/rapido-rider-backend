@@ -1,12 +1,16 @@
 <?php
+
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 // 1. Tell the browser it's okay to share data across different ports (CORS)
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 
+require_once __DIR__ . '/Config/env.php';
 require_once __DIR__ . '/Config/database.php';
-
 require_once __DIR__ . '/Src/Core/response.php';
 require_once __DIR__ . '/Src/Controllers/ridercontroller.php';
 
