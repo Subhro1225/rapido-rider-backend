@@ -59,6 +59,14 @@ function initializeApp() {
         initOnboardingFlow();
         logDebug("Initializing sidebar routing...");
         initSidebarNavigation();
+        
+        if (localStorage.getItem('qwikk_captain_logged_in') === 'true') {
+            console.log("Found existing session. Bypassing login.");
+            switchScreen('screen-app');
+            // Slight delay ensures the map container is fully rendered before Leaflet injects the map
+            setTimeout(() => initLeafletMap(), 100); 
+        }
+
         logDebug("Initialization complete!");
     } catch (err) {
         console.error("App Init Error:", err);
@@ -188,10 +196,12 @@ function initializeApp() {
         // Helper to verify OTP code
         const handleOtpSubmit = () => {
             try {
+                
                 let otpCode = '';
                 otpInputs.forEach(input => otpCode += input.value);
 
                 if (otpCode === "1234") {
+                    localStorage.setItem('qwikk_captain_logged_in', 'true');
                     // Correct OTP -> populate state & load main screen
                     otpErrorMsg.classList.add('hidden');
                     
@@ -282,6 +292,8 @@ function initializeApp() {
         logoutBtn.addEventListener('click', () => {
             // Turn off online status first, clean intervals
             toggleOnlineStatus(false);
+            localStorage.removeItem('qwikk_captain_logged_in'); 
+            
             window.location.reload();
         });
 
@@ -351,83 +363,49 @@ function initializeApp() {
     /* ==========================================================================
        ONLINE / OFFLINE STATUS TOGGLE & LOOP
        ========================================================================== */
-    function toggleOnlineStatus(isOnline) {
-        // Sync checkbox status
+    async function toggleOnlineStatus(isOnline) {
+        // Sync checkbox status and UI pill
         const toggleBtn = document.getElementById('toggle-status-btn');
+        const pill = document.getElementById('header-status-pill');
         if (toggleBtn) toggleBtn.checked = isOnline;
 
-        // Sync header status pill
-        const pill = document.getElementById('header-status-pill');
+        // 1. Tell the backend about the status change
+        try {
+            // NOTE: We are hardcoding driver_id: 1 for testing. We will make this dynamic later.
+            const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/driver/status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    driver_id: 1, 
+                    is_available: isOnline ? 1 : 0 
+                })
+            });
+            const data = await response.json();
+            console.log("Backend status update:", data.message);
+        } catch (error) {
+            console.error("Failed to update status on backend", error);
+        }
 
+        // 2. Update the UI
         if (isOnline) {
             state.status = "online";
             document.getElementById('txt-status-header').textContent = "Status: Online";
             document.getElementById('txt-status-desc').textContent = "Searching for passengers nearby...";
             document.getElementById('overlay-offline-status').style.display = 'none';
-            if (pill) {
-                pill.textContent = "Online";
-                pill.className = "status-pill online";
-            }
+            if (pill) { pill.textContent = "Online"; pill.className = "status-pill online"; }
             
-            // Start online clock tick
-            state.onlineTimeInterval = setInterval(() => {
-                state.earnings.onlineTime += 0.1;
-                document.getElementById('stat-hours').textContent = `${state.earnings.onlineTime.toFixed(1)}h`;
-            }, 360000); // Ticks every 6 mins for 0.1 hour
-            
-            async function fetchRealRidesFromBackend() {
-        try {
-            // Using the same URL structure you used for registration
-            const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/available");
-            const data = await response.json();
-            
-            if (data.status === "success") {
-                console.log("SUCCESS! Real rides from database:", data.rides);
-                return data.rides;
-            } else {
-                console.error("Backend returned an error:", data.message);
-                return null;
-            }
-        } catch (error) {
-            console.error("Network error fetching real rides:", error);
-            return null;
-        }
-    }
-
             // Start ride request loop
-            triggerMockBookingLoop();
-            logDebug("Captain is Online. Incoming loop started.");
+            triggerMockBookingLoop(); 
         } else {
             state.status = "offline";
             document.getElementById('txt-status-header').textContent = "Status: Offline";
             document.getElementById('txt-status-desc').textContent = "Toggle Online to receive ride requests";
             document.getElementById('overlay-offline-status').style.display = 'flex';
-            if (pill) {
-                pill.textContent = "Offline";
-                pill.className = "status-pill offline";
-            }
+            if (pill) { pill.textContent = "Offline"; pill.className = "status-pill offline"; }
             
-            // Clean up intervals
-            clearInterval(state.onlineTimeInterval);
             clearTimeout(state.requestTimeout);
-            clearInterval(state.requestInterval);
-            
             hideIncomingRequestOverlay();
-            logDebug("Captain is Offline. Incoming loop stopped.");
         }
-    }
-
-    function triggerMockBookingLoop() {
-        if (state.status !== "online" || state.activeRide || state.activeRequest) return;
-
-        // Generate a random booking between 5 to 10 seconds
-        const delay = 5000 + Math.random() * 5000;
-        state.requestTimeout = setTimeout(() => {
-            if (state.status !== "online" || state.activeRide || state.activeRequest) return;
-            
-            const req = generateMockRideRequest(state.driver.vehicleType, state.driver.lat, state.driver.lng);
-            showIncomingRequest(req);
-        }, delay);
     }
 
     /* ==========================================================================
