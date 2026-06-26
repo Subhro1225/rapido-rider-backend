@@ -1,0 +1,47 @@
+<?php
+// 1. Tell the browser it's okay to share data across different ports (CORS)
+header("Access-Control-Allow-Origin: *");
+header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
+
+require_once __DIR__ . '/Config/database.php';
+
+require_once __DIR__ . '/Src/Core/response.php';
+require_once __DIR__ . '/Src/Controllers/ridercontroller.php';
+
+use App\Controllers\RiderController;
+
+// Handle preflight browser security checks gently
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+// 2. Read the order ticket parameter coming from app.js (?route=...)
+$route = isset($_GET['route']) ? trim($_GET['route'], " /") : '';
+
+// 3. Catch the raw JSON envelope data sent by the frontend
+$inputData = json_decode(file_get_contents("php://input"), true) ?? [];
+
+$controller = new RiderController();
+
+// 4. The Switch Case: Decide what cooking station handles the request
+switch ($route) {
+
+    case 'api/driver/signup':
+        $controller->signup($inputData);
+        break;
+
+    case 'api/driver/login':
+        $controller->login($inputData);
+        break;
+
+    default:
+        http_response_code(404);
+
+        echo json_encode([
+            "status" => "error",
+            "message" => "Route not found."
+        ]);
+}

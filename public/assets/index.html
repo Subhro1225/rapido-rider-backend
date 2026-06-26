@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwikk Captain - Drive & Earn</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css?v=3.0">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div id="app-container">
+        
+        <!-- 1. WELCOME LANDING SCREEN -->
+        <div id="screen-welcome" class="screen active welcome-theme">
+            <div class="welcome-content">
+                <div class="welcome-brand">Qwikk <span class="brand-tag">Captain</span></div>
+                <h1 class="welcome-slogan">Drive.<br>Earn <em>fast.</em></h1>
+                <p class="welcome-subtitle">Join the most rewarding ride-sharing fleet in your city. High earnings, instant payouts, and complete flexibility on every drive.</p>
+                <div class="welcome-actions">
+                    <button id="btn-welcome-register" class="btn-welcome-dark">Register as Captain &rarr;</button>
+                    <button id="btn-welcome-login" class="btn-welcome-light">Login as Captain</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. LOGIN / REGISTRATION DETAILS SCREEN -->
+        <div id="screen-login" class="screen welcome-theme">
+            <button class="btn-back" id="btn-back-to-welcome">
+                <i data-lucide="arrow-left"></i>
+            </button>
+            <div class="auth-card">
+                <div class="auth-header">
+                    <div class="welcome-brand text-dark">Qwikk <span class="brand-tag">Captain</span></div>
+                    <h2>Captain Details</h2>
+                    <p>Enter your details to register on Qwikk</p>
+                </div>
+                
+                <div class="auth-body">
+                    <div class="form-group-auth">
+                        <label for="login-name">Driver Full Name</label>
+                        <input type="text" id="login-name" placeholder="Enter Full Name" autocomplete="off">
+                    </div>
+                    
+                    <div class="form-group-auth">
+                        <label for="login-phone">Mobile Number</label>
+                        <div class="phone-input-container">
+                            <span class="country-code">+91</span>
+                            <input type="tel" id="login-phone" placeholder="Enter 10-digit number" maxlength="10" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="form-group-auth">
+                        <label for="login-vehicle">Vehicle Type</label>
+                        <select id="login-vehicle">
+                            <option value="bike">Qwikk Bike</option>
+                            <option value="scooty">Scooty</option>
+                            <option value="auto">Auto</option>
+                            <option value="bike-pink">Pink Bike (Women Safety)</option>
+                            <option value="cab-economy">Cab Economy</option>
+                            <option value="cab-priority">Cab Priority</option>
+                            <option value="cab-premium">Cab Premium</option>
+                            <option value="cab-xl">Cab XL</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group-auth">
+                        <label for="login-plate">Vehicle Registration Plate</label>
+                        <input type="text" id="login-plate" placeholder="e.g. JH 05 AB 1234" autocomplete="off">
+                    </div>
+                </div>
+                
+                <div class="auth-footer">
+                    <button id="btn-login-next" class="btn-primary btn-block" disabled>Next</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. OTP VERIFICATION SCREEN -->
+        <div id="screen-otp" class="screen welcome-theme">
+            <button class="btn-back" id="btn-back-to-login">
+                <i data-lucide="arrow-left"></i>
+            </button>
+            <div class="auth-card">
+                <div class="auth-header">
+                    <h2>Verify OTP</h2>
+                    <p>Sent to <strong id="otp-display-name">Captain</strong> at <span id="otp-display-phone">+91 9999999999</span></p>
+                </div>
+                
+                <div class="auth-body">
+                    <div class="otp-input-group">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                    </div>
+                    <div class="otp-help-msg">Tip: Enter correct OTP <strong>1234</strong> to login.</div>
+                    <div id="otp-error-msg" class="error-msg-auth hidden">Invalid OTP. Please try again!</div>
+                </div>
+                
+                <div class="auth-footer">
+                    <button id="btn-verify-otp" class="btn-primary btn-block">Verify & Proceed</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. APP MAIN CAPTAIN DASHBOARD -->
+        <div id="screen-app" class="screen">
+            <!-- Sidebar Navigation (Matches passenger dashboard layout) -->
+            <nav class="sidebar">
+                <div class="sidebar-header">
+                    <div class="user-profile-summary">
+                        <div class="profile-avatar">🧑‍✈️</div>
+                        <div class="profile-details">
+                            <h4 id="sidebar-captain-name">Captain Name</h4>
+                            <p id="sidebar-captain-vehicle">Bike &bull; JH 05 AB 1234</p>
+                            <div class="driver-stars" style="margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                                <i data-lucide="star" style="width:12px;height:12px;fill:#FBC50A;stroke:none;"></i>
+                                <span style="font-size:12px;color:var(--text-secondary);">4.9 (420 rides)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <ul class="sidebar-menu">
+                    <li class="menu-item active" data-target="dashboard">
+                        <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
+                    </li>
+                    <li class="menu-item" data-target="earnings">
+                        <i data-lucide="wallet"></i> <span>Earnings & Payouts</span>
+                    </li>
+                    <li class="menu-item" data-target="history">
+                        <i data-lucide="history"></i> <span>Ride History</span>
+                    </li>
+                    <li class="menu-item" data-target="profile">
+                        <i data-lucide="user-check"></i> <span>Verification Details</span>
+                    </li>
+                </ul>
+                <div class="sidebar-footer">
+                    <button id="btn-logout" class="btn-logout-custom">
+                        <i data-lucide="log-out"></i> <span>Go Offline & Logout</span>
+                    </button>
+                </div>
+            </nav>
+
+            <main class="app-main-content">
+                <!-- Mobile Navigation Bar -->
+                <header class="mobile-header">
+                    <button id="mobile-menu-toggle"><i data-lucide="menu"></i></button>
+                    <div class="mobile-logo-text">Qwikk Captain</div>
+                    <div class="header-status-wrap">
+                        <span id="header-status-pill" class="status-pill offline">Offline</span>
+                    </div>
+                </header>
+
+                <!-- Workspace Grid -->
+                <div class="workspace-grid">
+                    <!-- Left Sidebar Panel for active panel content -->
+                    <section class="left-panel">
+                        
+                        <!-- PANEL 1: DASHBOARD / ONLINE STATS -->
+                        <div id="panel-dashboard" class="booking-panel active-panel">
+                            <div class="panel-header-row">
+                                <h2>Captain Dashboard</h2>
+                            </div>
+
+                            <!-- Online status toggle switch card -->
+                            <div class="status-card">
+                                <div class="status-info">
+                                    <h3 id="txt-status-header">Status: Offline</h3>
+                                    <p id="txt-status-desc">Toggle Online to receive ride requests</p>
+                                </div>
+                                <label class="switch-wrap">
+                                    <input type="checkbox" id="toggle-status-btn">
+                                    <span class="slider-switch"></span>
+                                </label>
+                            </div>
+
+                            <!-- Statistics box Grid -->
+                            <div class="earnings-grid">
+                                <div class="stat-box">
+                                    <span class="lbl">Today's Payout</span>
+                                    <span id="stat-earnings" class="val green">₹0</span>
+                                </div>
+                                <div class="stat-box">
+                                    <span class="lbl">Completed Rides</span>
+                                    <span id="stat-rides" class="val">0</span>
+                                </div>
+                                <div class="stat-box">
+                                    <span class="lbl">Online Time</span>
+                                    <span id="stat-hours" class="val">0.0h</span>
+                                </div>
+                                <div class="stat-box">
+                                    <span class="lbl">Acceptance Rate</span>
+                                    <span id="stat-acceptance" class="val">100%</span>
+                                </div>
+                            </div>
+
+                            <!-- Active Navigation State Panel (Visible during active ride) -->
+                            <div id="active-navigation-widget" class="active-nav-card hidden">
+                                <div class="nav-status-header">
+                                    <div class="nav-pulse-dot" id="nav-pulse-indicator"></div>
+                                    <span id="txt-nav-status">Heading to Pickup</span>
+                                </div>
+                                
+                                <div class="client-meta">
+                                    <div class="client-avatar" id="nav-client-avatar">👨</div>
+                                    <div class="client-details">
+                                        <h4 id="nav-client-name">Passenger Name</h4>
+                                        <p><i data-lucide="star" style="width:12px;height:12px;fill:#FBC50A;stroke:none;"></i> <span id="nav-client-rating">4.8</span></p>
+                                    </div>
+                                </div>
+
+                                <div class="nav-locations">
+                                    <div class="nav-loc-row">
+                                        <i data-lucide="circle-dot" class="green"></i>
+                                        <div class="nav-details">
+                                            <span class="title">Pickup Location</span>
+                                            <span id="nav-pickup-address" class="address">Pickup street address details...</span>
+                                        </div>
+                                    </div>
+                                    <div class="nav-loc-row">
+                                        <i data-lucide="map-pin" class="red"></i>
+                                        <div class="nav-details">
+                                            <span class="title">Dropoff Destination</span>
+                                            <span id="nav-dropoff-address" class="address">Dropoff street address details...</span>
+                                        </div>
+                                    </div>
+                                    <div class="nav-line-connector"></div>
+                                </div>
+
+                                <!-- Start ride OTP check -->
+                                <div id="start-ride-otp-container" class="otp-start-ride-wrap">
+                                    <p>Ask the passenger for the Start Ride OTP code:<br><strong>(Hint: <span id="nav-hint-otp">5678</span>)</strong></p>
+                                    <input type="text" id="input-start-ride-otp" class="ride-start-code-input" placeholder="0000" maxlength="4">
+                                    <div id="start-otp-error" class="error-msg-auth hidden" style="margin-bottom:0;margin-top:6px;">
+                                        <i data-lucide="alert-circle"></i>
+                                        <span>Incorrect OTP!</span>
+                                    </div>
+                                </div>
+
+                                <button id="btn-navigation-action" class="btn-ride-nav-action">Confirm Arrived at Pickup</button>
+                            </div>
+
+                            <!-- Fare Collection Screen (Visible upon completion) -->
+                            <div id="fare-collection-widget" class="complete-fare-card hidden">
+                                <div class="fare-circle">₹</div>
+                                <div class="fare-collect-details">
+                                    <h3>Collect Cash / Wallet Fare</h3>
+                                    <h2 id="fare-collected-amount">₹154</h2>
+                                </div>
+                                <div class="fare-breakdown-list">
+                                    <div class="fare-item-row">
+                                        <span>Distance Traveled</span>
+                                        <span id="fare-breakdown-dist">4.2 km</span>
+                                    </div>
+                                    <div class="fare-item-row">
+                                        <span>Ride Payout</span>
+                                        <span id="fare-breakdown-payout">₹144</span>
+                                    </div>
+                                    <div class="fare-item-row">
+                                        <span>Promo / Tips</span>
+                                        <span>₹10</span>
+                                    </div>
+                                    <div class="fare-item-row bold">
+                                        <span>Total Earnings</span>
+                                        <span id="fare-breakdown-total">₹154</span>
+                                    </div>
+                                </div>
+                                <button id="btn-complete-fare-done" class="btn-ride-nav-action">Confirm Payment Received</button>
+                            </div>
+                        </div>
+
+                        <!-- PANEL 2: EARNINGS & PAYOUTS -->
+                        <div id="panel-earnings" class="booking-panel">
+                            <div class="panel-header-row">
+                                <h2>Earnings & Payouts</h2>
+                                <button class="btn-close-subpanel"><i data-lucide="x"></i></button>
+                            </div>
+
+                            <div class="earnings-stats-card">
+                                <h3>Weekly Earnings Chart</h3>
+                                <div class="chart-container">
+                                    <div class="chart-bar-column">
+                                        <div id="bar-mon" class="chart-bar-fill" style="height: 20%;"></div>
+                                        <span class="chart-day-label">MON</span>
+                                    </div>
+                                    <div class="chart-bar-column">
+                                        <div id="bar-tue" class="chart-bar-fill" style="height: 35%;"></div>
+                                        <span class="chart-day-label">TUE</span>
+                                    </div>
+                                    <div class="chart-bar-column">
+                                        <div id="bar-wed" class="chart-bar-fill" style="height: 10%;"></div>
+                                        <span class="chart-day-label">WED</span>
+                                    </div>
+                                    <div class="chart-bar-column">
+                                        <div id="bar-thu" class="chart-bar-fill" style="height: 50%;"></div>
+                                        <span class="chart-day-label">THU</span>
+                                    </div>
+                                    <div class="chart-bar-column">
+                                        <div id="bar-fri" class="chart-bar-fill" style="height: 75%;"></div>
+                                        <span class="chart-day-label">FRI</span>
+                                    </div>
+                                    <div class="chart-bar-column">
+                                        <div id="bar-sat" class="chart-bar-fill" style="height: 90%;"></div>
+                                        <span class="chart-day-label">SAT</span>
+                                    </div>
+                                    <div class="chart-bar-column">
+                                        <div id="bar-sun" class="chart-bar-fill" style="height: 5%;"></div>
+                                        <span class="chart-day-label">SUN</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="payout-pills-wrap">
+                                <div class="payout-row">
+                                    <h4>Available Wallet Payout</h4>
+                                    <span id="wallet-withdrawable" class="amt">₹1240</span>
+                                </div>
+                                <button id="btn-withdraw-payout" class="btn-primary btn-block">
+                                    <i data-lucide="arrow-up-right"></i>
+                                    <span>Request Bank Payout</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- PANEL 3: RIDE HISTORY -->
+                        <div id="panel-history" class="booking-panel">
+                            <div class="panel-header-row">
+                                <h2>Completed Trips</h2>
+                                <button class="btn-close-subpanel"><i data-lucide="x"></i></button>
+                            </div>
+
+                            <div class="history-list" id="trips-history-container">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- PANEL 4: VERIFICATION DETAILS -->
+                        <div id="panel-profile" class="booking-panel">
+                            <div class="panel-header-row">
+                                <h2>Verification Details</h2>
+                                <button class="btn-close-subpanel"><i data-lucide="x"></i></button>
+                            </div>
+
+                            <div class="profile-checklist-card">
+                                <h3>Document Approval List</h3>
+                                
+                                <div class="checklist-item">
+                                    <div class="checklist-info">
+                                        <h4>Driving License</h4>
+                                        <p>Approved &bull; Valid till 2032</p>
+                                    </div>
+                                    <div class="checklist-badge">
+                                        <i data-lucide="check-circle-2"></i> APPROVED
+                                    </div>
+                                </div>
+
+                                <div class="checklist-item">
+                                    <div class="checklist-info">
+                                        <h4>Vehicle RC Book</h4>
+                                        <p>Approved &bull; JH05 Registration</p>
+                                    </div>
+                                    <div class="checklist-badge">
+                                        <i data-lucide="check-circle-2"></i> APPROVED
+                                    </div>
+                                </div>
+
+                                <div class="checklist-item">
+                                    <div class="checklist-info">
+                                        <h4>Commercial Insurance</h4>
+                                        <p>Approved &bull; Insured via Tata AIG</p>
+                                    </div>
+                                    <div class="checklist-badge">
+                                        <i data-lucide="check-circle-2"></i> APPROVED
+                                    </div>
+                                </div>
+
+                                <div class="checklist-item">
+                                    <div class="checklist-info">
+                                        <h4>Bank Passbook Payouts</h4>
+                                        <p>Linked &bull; SBI Account verified</p>
+                                    </div>
+                                    <div class="checklist-badge">
+                                        <i data-lucide="check-circle-2"></i> LINKED
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </section>
+
+                    <!-- Map Panel -->
+                    <section class="right-panel-map">
+                        <div id="leaflet-map-container"></div>
+                        
+                        <!-- Offline overlay mask banner -->
+                        <div id="overlay-offline-status" class="map-status-overlay">
+                            <div class="info">
+                                <h3>You are Offline</h3>
+                                <p>Turn switch online to start receiving passenger bookings in your city.</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+
+        <!-- 5. INCOMING RIDE REQUEST OVERLAY / MODAL DIALOG -->
+        <div id="overlay-incoming-request" class="request-modal-overlay">
+            <div class="request-card">
+                <header class="req-header">
+                    <div class="req-badge-alert">Incoming booking</div>
+                    
+                    <!-- Countdown timer ring -->
+                    <div class="countdown-timer-wrap">
+                        <svg class="countdown-svg">
+                            <circle class="bg" cx="22" cy="22" r="20" />
+                            <circle class="bar" id="countdown-ring-bar" cx="22" cy="22" r="20" />
+                        </svg>
+                        <span id="countdown-text" class="countdown-text">15</span>
+                    </div>
+                </header>
+
+                <div class="req-payout-box">
+                    <span class="lbl">Estimated Payout</span>
+                    <span id="req-payout-amt" class="val">₹144</span>
+                </div>
+
+                <div class="req-passenger-meta">
+                    <div class="avatar" id="req-passenger-avatar">👨</div>
+                    <div class="details">
+                        <h4 id="req-passenger-name">Rahul Verma</h4>
+                        <p><i data-lucide="star" style="width:12px;height:12px;fill:#FBC50A;stroke:none;"></i> <span id="req-passenger-rating">4.8</span> &bull; Cash/Wallet</p>
+                    </div>
+                </div>
+
+                <div class="req-locations">
+                    <div class="nav-loc-row">
+                        <i data-lucide="circle-dot" class="green"></i>
+                        <div class="nav-details">
+                            <span class="title">Pickup Location</span>
+                            <span id="req-pickup-name" class="address">Telco Colony</span>
+                        </div>
+                    </div>
+                    <div class="nav-loc-row">
+                        <i data-lucide="map-pin" class="red"></i>
+                        <div class="nav-details">
+                            <span class="title">Dropoff Destination</span>
+                            <span id="req-dropoff-name" class="address">XLRI Campus</span>
+                        </div>
+                    </div>
+                    <div class="nav-line-connector"></div>
+                </div>
+
+                <div class="req-actions">
+                    <button id="btn-request-decline" class="btn-secondary">Decline</button>
+                    <button id="btn-request-accept" class="btn-primary">
+                        <span>Accept Ride</span>
+                        <i data-lucide="check"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- App Scripts -->
+    <script src="simulation.js?v=3.0"></script>
+    <script src="app.js?v=3.0"></script>
+</body>
+</html>
