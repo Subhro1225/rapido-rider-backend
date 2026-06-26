@@ -12,6 +12,8 @@ function initializeApp() {
         }
     }
 
+let authMode = "register";
+
     // Default State
     const state = {
         driver: {
@@ -110,20 +112,40 @@ function initializeApp() {
         const backToLoginBtn = document.getElementById('btn-back-to-login');
 
         // Transition from Welcome Screen
-        welcomeRegisterBtn.addEventListener('click', () => switchScreen('screen-login'));
-        welcomeLoginBtn.addEventListener("click", () => {
-
-            loginOnlyPhoneInput.value = "";
-
-            switchScreen("screen-login-only");
-
-        });
+        welcomeRegisterBtn.addEventListener('click', () =>{ authMode = 'register'; switchScreen('screen-login')});
+        welcomeLoginBtn.addEventListener("click", () => { loginOnlyPhoneInput.value = ""; authMode = 'login'; switchScreen("screen-login-only"); });
 
             loginOnlyBackBtn.addEventListener("click", () => {
 
             switchScreen("screen-welcome");
 
         });
+
+       loginOnlyNextBtn.addEventListener("click", () => {
+
+            const phone = loginOnlyPhoneInput.value.trim();
+
+            if (!/^\d{10}$/.test(phone)) {
+                alert("Please enter a valid 10-digit mobile number.");
+                return;
+            }
+
+            // Store the phone so we can use it after OTP verification
+            state.driver.phone = phone;
+
+            // Update OTP screen
+            document.getElementById("otp-display-name").textContent = "Captain Login";
+            document.getElementById("otp-display-phone").textContent = `+91 ${phone}`;
+
+            // Reset OTP inputs
+            otpInputs.forEach(input => input.value = "");
+            otpErrorMsg.classList.add("hidden");
+
+            switchScreen("screen-otp");
+
+            setTimeout(() => otpInputs[0].focus(), 300);
+        });
+
         backToWelcomeBtn.addEventListener('click', () => switchScreen('screen-welcome'));
 
         // Input validation for Registration Screen
@@ -198,20 +220,14 @@ function initializeApp() {
 
 });
 
-        backToLoginBtn.addEventListener('click', () => switchScreen('screen-login'));
+      backToLoginBtn.addEventListener("click", () => {
 
-        // OTP inputs chaining
-        otpInputs.forEach((input, index) => {
-            input.addEventListener('input', () => {
-                if (input.value && index < otpInputs.length - 1) {
-                    otpInputs[index + 1].focus();
-                }
-            });
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Backspace' && !input.value && index > 0) {
-                    otpInputs[index - 1].focus();
-                }
-            });
+            if (authMode === "register") {
+                switchScreen("screen-login");
+            } else {
+                switchScreen("screen-login-only");
+            }
+
         });
 
         // Helper to verify OTP code
@@ -221,7 +237,21 @@ function initializeApp() {
                 let otpCode = '';
                 otpInputs.forEach(input => otpCode += input.value);
 
-                if (otpCode === "1234") {
+                if (otpCode !== "1234") {
+
+                    otpErrorMsg.classList.remove("hidden");
+                    otpInputs.forEach(input => input.value = "");
+                    otpInputs[0].focus();
+                    return;
+                }
+
+                // Correct OTP
+                otpErrorMsg.classList.add("hidden");
+
+                if (authMode === "register") {
+
+                    // Registration flow starts here
+
                     localStorage.setItem('qwikk_captain_logged_in', 'true');
                     // Correct OTP -> populate state & load main screen
                     otpErrorMsg.classList.add('hidden');
@@ -250,11 +280,13 @@ function initializeApp() {
                     // Initialise Leaflet Map
                     switchScreen('screen-app');
                     initLeafletMap();
-                } else {
-                    // Incorrect OTP -> show error, clear inputs
-                    otpErrorMsg.classList.remove('hidden');
-                    otpInputs.forEach(input => input.value = '');
-                    otpInputs[0].focus();
+                }
+                else {
+
+                    console.log("Login flow");
+
+                    alert("Login successful!");
+
                 }
             } catch (err) {
                 console.error("OTP Verification Error:", err);
