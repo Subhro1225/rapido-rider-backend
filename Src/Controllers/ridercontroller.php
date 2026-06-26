@@ -64,54 +64,67 @@ class RiderController {
     }
     
     public function login($data) {
-        $mobile = $data['mobile'] ?? '';
-        $password = $data['password'] ?? '';
 
-        // 1. Core Validation
-        if (empty($mobile) || empty($password)) {
+    $mobile = $data['mobile'] ?? '';
+    $otp = $data['otp'] ?? '';
+
+    // Validate input
+    if (empty($mobile) || empty($otp)) {
+        Response::json([
+            "status" => "error",
+            "message" => "Mobile number and OTP are required."
+        ], 400);
+        return;
+    }
+
+    try {
+
+        $db = Database::getInstance();
+
+        $query = "SELECT * FROM drivers WHERE mobile = :mobile LIMIT 1";
+        $stmt = $db->prepare($query);
+        $stmt->execute([
+            ':mobile' => $mobile
+        ]);
+
+        $driver = $stmt->fetch();
+
+        if (!$driver) {
             Response::json([
                 "status" => "error",
-                "message" => "Mobile and password fields are required."
-            ], 400);
+                "message" => "Driver not found."
+            ], 404);
             return;
         }
 
-        try {
-            // 2. Fetch the active database connection instance
-            $db = Database::getInstance();
-
-            // 3. Query your real 'drivers' table
-            $query = "SELECT * FROM drivers WHERE mobile = :mobile LIMIT 1";
-            $stmt = $db->prepare($query);
-            $stmt->execute([':mobile' => $mobile]);
-            $user = $stmt->fetch();
-
-            // 4. Verify user credentials match
-            // 4. Verify user credentials match safely
-        if ($user && password_verify($password, $user['password'])) {
-            Response::json([
-                "status" => "success",
-                "message" => "Authentication successful!",
-                "user" => [
-                    "id" => $user['id'],
-                    "mobile" => $user['mobile']
-                ]
-            ]);
-        } else {
-                Response::json([
-                    "status" => "error",
-                    "message" => "Invalid mobile or password credentials."
-                ], 401); // 401 means Unauthorized
-            }
-
-        } catch (\PDOException $e) {
+        // Temporary OTP validation
+        if ($otp !== "1234") {
             Response::json([
                 "status" => "error",
-                "message" => "Database operation failed: " . $e->getMessage()
-            ], 500);
+                "message" => "Invalid OTP."
+            ], 401);
+            return;
         }
-    }
 
+        Response::json([
+            "status" => "success",
+            "message" => "Login successful.",
+            "driver" => [
+                "id" => $driver['id'],
+                "name" => $driver['name'],
+                "mobile" => $driver['mobile']
+            ]
+        ]);
+
+    } catch (\PDOException $e) {
+
+        Response::json([
+            "status" => "error",
+            "message" => "Database error: " . $e->getMessage()
+        ], 500);
+
+    }
+}
     public function toggleAvailability($data) {
         $driverId = $data['driver_id'] ?? '';
         $requestedState = $data['is_available'] ?? 0; // Default to 0 (false) if not specified
