@@ -30,6 +30,8 @@ $inputData = json_decode(file_get_contents("php://input"), true) ?? [];
 
 $controller = new RiderController();
 
+$requestData = array_merge($_GET, $inputData);
+
 // 4. The Switch Case: Decide what cooking station handles the request
 switch ($route) {
 
@@ -82,6 +84,31 @@ switch ($route) {
             $controller = new \App\Controllers\RiderController();
             // Pointing to your controller's complete method
             $controller->completeRide($data); 
+            exit;
+        }
+        break;
+
+    case 'get_driver_profile':
+        $controller->getDriverProfile($inputData);
+        break;
+
+    case 'get_driver_history':
+        $controller->getDriverRideHistory($inputData);
+        break;
+
+    case 'submit_rating':
+        $controller->submitRideRating($inputData);
+        break;
+
+    case 'get_rider_analytics':
+        $controller->getRiderAnalytics($inputData);
+        break;
+
+    case 'api/rides/confirm_payment':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $data = json_decode(file_get_contents("php://input"), true);
+            $controller = new \App\Controllers\RiderController();
+            $controller->settleRidePayment($data);
             exit;
         }
         break;

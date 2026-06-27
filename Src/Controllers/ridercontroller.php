@@ -384,6 +384,10 @@ class RiderController {
                 ':payment_method' => $paymentMethod
             ]);
 
+            $updateRideQuery = "UPDATE rides SET payment_status = 'success' WHERE id = :ride_id";
+            $updateRideStmt = $db->prepare($updateRideQuery);
+            $updateRideStmt->execute([':ride_id' => $rideId]);
+
             Response::json([
                 "status" => "success",
                 "message" => "Payment transaction settled successfully.",
@@ -400,41 +404,196 @@ class RiderController {
         }
     }
 
-    public function getDriverAnalytics($data) {
+    /**
+     * Phase 3: Get Captain Profile
+     */
+    public function getDriverProfile($data) {
         $driverId = $data['driver_id'] ?? '';
 
         if (empty($driverId)) {
             Response::json([
                 "status" => "error",
-                "message" => "Driver ID parameter is required for analytics generation."
+                "message" => "Driver ID parameter is required."
             ], 400);
         }
 
         try {
             $db = Database::getInstance();
+            $stmt = $db->prepare("
+                SELECT id, name, mobile, vehicle_number, is_available, average_rating 
+                FROM drivers 
+                WHERE id = :id
+            ");
+            $stmt->execute([':id' => $driverId]);
+            $driver = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-            // Run an optimized aggregate join query to pull total trips and financial metrics
-            $query = "SELECT 
-                        COUNT(r.id) as total_completed_trips,
-                        IFNULL(SUM(p.amount), 0.00) as total_lifetime_earnings
-                      FROM rides r
-                      INNER JOIN payments p ON r.id = p.ride_id
-                      WHERE r.driver_id = :driver_id AND r.ride_status = 'completed'";
-            
-            $stmt = $db->prepare($query);
+            if ($driver) {
+                $driver['is_available'] = (bool)$driver['is_available'];
+                Response::json([
+                    "status" => "success", 
+                    "data" => $driver
+                ]);
+            } else {
+                Response::json([
+                    "status" => "error", 
+                    "message" => "Driver not found."
+                ], 404);
+            }
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Database error: " . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Phase 3: Get Ride History
+     */
+    public function getDriverRideHistory($data) {
+        $driverId = $data['driver_id'] ?? '';
+
+        if (empty($driverId)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Driver ID parameter is required."
+            ], 400);
+        }
+
+        try {
+            $db = Database::getInstance();
+            $stmt = $db->prepare("
+                SELECT 
+                    r.id as ride_id, 
+                    r.pickup_location, 
+                    r.destination, 
+                    r.distance_km, 
+                    r.fare, 
+                    r.ride_status, 
+                    r.created_at as ride_date,
+                    u.name as rider_name
+                FROM rides r
+                JOIN users u ON r.user_id = u.id
+                WHERE r.driver_id = :driver_id 
+                ORDER BY r.created_at DESC
+            ");
             $stmt->execute([':driver_id' => $driverId]);
-            $analytics = $stmt->fetch();
+            $history = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
             Response::json([
-                "status" => "success",
-                "driver_id" => $driverId,
-                "performance_metrics" => [
-                    "completed_trips" => (int)$analytics['total_completed_trips'],
-                    "lifetime_earnings" => (float)$analytics['total_lifetime_earnings'],
-                    "currency" => "INR"
-                ]
+                "status" => "success", 
+                "data" => $history
+            ]);
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Database error: " . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Phase 3: Submit Rating
+     */
+    public function submitRideRating($data) {
+        $rideId = $data['ride_id'] ?? '';
+        $driverId = $data['driver_id'] ?? '';
+        $userId = $data['user_id'] ?? '';
+        $rating = $data['rating'] ?? '';
+        $comments = $data['comments'] ?? '';
+
+        if (empty($rideId) || empty($driverId) || empty($userId) || empty($rating)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Missing required fields."
+            ], 400);
+        }
+
+        try {
+            $db = Database::getInstance();
+            $db->beginTransaction();
+
+            // 1. Insert rating
+            $insertStmt = $db->prepare("
+                INSERT INTO user_feedback (user_id, ride_id, driver_id, rating, comments) 
+                VALUES (:user_id, :ride_id, :driver_id, :rating, :comments)
+            ");
+            $insertStmt->execute([
+                ':user_id' => $userId, 
+                ':ride_id' => $rideId, 
+                ':driver_id' => $driverId, 
+                ':rating' => $rating, 
+                ':comments' => $comments
             ]);
 
+            // 2. Update driver's average rating
+            $updateStmt = $db->prepare("
+                UPDATE drivers 
+                SET average_rating = (
+                    SELECT AVG(rating) 
+                    FROM user_feedback 
+                    WHERE driver_id = :driver_id_sub
+                ) 
+                WHERE id = :id
+            ");
+            $updateStmt->execute([
+                ':driver_id_sub' => $driverId, 
+                ':id' => $driverId
+            ]);
+
+            $db->commit();
+            
+            Response::json([
+                "status" => "success", 
+                "message" => "Rating submitted successfully."
+            ]);
+        } catch (\PDOException $e) {
+            if (isset($db)) {
+                $db->rollBack();
+            }
+            Response::json([
+                "status" => "error",
+                "message" => "Failed to submit rating: " . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get Rider Analytics (Stats & Spending)
+     */
+    public function getRiderAnalytics($data) {
+        $userId = $data['user_id'] ?? '';
+
+        if (empty($userId)) {
+            Response::json([
+                "status" => "error",
+                "message" => "User ID parameter is required."
+            ], 400);
+        }
+
+        try {
+            $db = Database::getInstance();
+            $stmt = $db->prepare("
+                SELECT 
+                    COUNT(id) as total_rides_requested,
+                    SUM(CASE WHEN ride_status = 'completed' THEN 1 ELSE 0 END) as completed_rides,
+                    SUM(CASE WHEN ride_status = 'completed' THEN distance_km ELSE 0 END) as total_distance_km,
+                    SUM(CASE WHEN ride_status = 'completed' THEN fare ELSE 0 END) as total_spent
+                FROM rides 
+                WHERE user_id = :user_id
+            ");
+            $stmt->execute([':user_id' => $userId]);
+            $analytics = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            $analytics['total_distance_km'] = (float)($analytics['total_distance_km'] ?? 0.00);
+            $analytics['total_spent'] = (float)($analytics['total_spent'] ?? 0.00);
+            $analytics['total_rides_requested'] = (int)$analytics['total_rides_requested'];
+            $analytics['completed_rides'] = (int)$analytics['completed_rides'];
+
+            Response::json([
+                "status" => "success", 
+                "data" => $analytics
+            ]);
         } catch (\PDOException $e) {
             Response::json([
                 "status" => "error",

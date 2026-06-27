@@ -64,6 +64,13 @@ let authMode = "register";
         
         if (localStorage.getItem('qwikk_captain_logged_in') === 'true') {
             console.log("Found existing session. Bypassing login.");
+            
+            // PHASE 1 FIX: Grab the real ID and fetch the profile BEFORE showing the map
+            const activeDriverId = localStorage.getItem("current_driver_id");
+            if (activeDriverId) {
+                fetchDriverProfile(activeDriverId);
+            }
+
             switchScreen('screen-app');
             // Slight delay ensures the map container is fully rendered before Leaflet injects the map
             setTimeout(() => initLeafletMap(), 100); 
@@ -321,12 +328,13 @@ let authMode = "register";
                     initLeafletMap();
                 }
                 else {
-
                     const result = await loginCaptain(loginOnlyPhoneInput.value.trim());
 
                     if (result.status === "success") {
-
                         localStorage.setItem("qwikk_captain_logged_in", "true");
+                        
+                        // THE FIX: Save the REAL dynamic ID from your database
+                        localStorage.setItem("current_driver_id", result.driver.id); 
 
                         state.driver.name = result.driver.name;
                         state.driver.phone = result.driver.mobile;
@@ -337,11 +345,8 @@ let authMode = "register";
                         initLeafletMap();
 
                     } else {
-
                         alert(result.message);
-
                     }
-
                     console.log(result);
 
                 }
@@ -467,6 +472,105 @@ let authMode = "register";
         });
     }
 
+        /**
+         * PHASE 3: Fetch Driver Profile
+         */
+        async function fetchDriverProfile(driverId) {
+            try {
+                const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=get_driver_profile", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ driver_id: driverId })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    console.log("Profile Data Restored:", result.data);
+                    
+                    // Update internal memory
+                    state.driver.name = result.data.name;
+                    state.driver.vehicleType = result.data.vehicle_type || 'bike';
+                    state.driver.plateNumber = result.data.plate_number || 'UNKNOWN';
+
+                    // Paint the UI
+                    const nameTag = document.getElementById('sidebar-captain-name');
+                    if (nameTag) nameTag.textContent = state.driver.name;
+
+                    const vehicleLabels = {
+                        bike: "Qwikk Bike", scooty: "Scooty", auto: "Auto",
+                        'bike-pink': "Pink Bike", 'cab-economy': "Cab Economy",
+                        'cab-priority': "Cab Priority", 'cab-premium': "Cab Premium", 'cab-xl': "Cab XL"
+                    };
+                    const displayVehicle = vehicleLabels[state.driver.vehicleType] || "Vehicle";
+                    
+                    const vehicleTag = document.getElementById('sidebar-captain-vehicle');
+                    if (vehicleTag) {
+                        vehicleTag.innerHTML = `${displayVehicle} &bull; ${state.driver.plateNumber}`;
+                    }
+                }
+            } catch (error) {
+                console.error("Network Error restoring profile:", error);
+            }
+        }
+
+        /**
+         * PHASE 3: Submit a Ride Rating
+         */
+        async function submitRating(rideId, driverId, userId, rating, comments = "") {
+            try {
+                const payload = {
+                    ride_id: rideId,
+                    driver_id: driverId,
+                    user_id: userId,
+                    rating: rating,
+                    comments: comments
+                };
+
+                const response = await fetch(`${API_BASE_URL}?route=submit_rating`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    console.log("Rating Submitted!");
+                    // TODO: Show a success message or redirect the user
+                } else {
+                    console.error("Rating Error:", result.message);
+                }
+            } catch (error) {
+                console.error("Network Error:", error);
+            }
+        }
+
+        /**
+         * PHASE 3: Fetch Rider Analytics
+         */
+        async function fetchRiderAnalytics(userId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}?route=get_rider_analytics`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    console.log("Analytics Data:", result.data);
+                    // TODO: Update your analytics dashboard UI
+                    return result.data;
+                } else {
+                    console.error("Analytics Error:", result.message);
+                }
+            } catch (error) {
+                console.error("Network Error:", error);
+            }
+        }
+
     /* ==========================================================================
        LEAFLET MAP INITIALISATION
        ========================================================================== */
@@ -524,6 +628,14 @@ let authMode = "register";
        ONLINE / OFFLINE STATUS TOGGLE & LOOP
        ========================================================================== */
     async function toggleOnlineStatus(isOnline) {
+        // CRITICAL FIX: Pull the active ID from memory first
+        const activeDriverId = localStorage.getItem("current_driver_id");
+        
+        if (!activeDriverId) {
+            console.error("Cannot update status: No captain logged in.");
+            return;
+        }
+
         // Sync checkbox status and UI pill
         const toggleBtn = document.getElementById('toggle-status-btn');
         const pill = document.getElementById('header-status-pill');
@@ -531,12 +643,11 @@ let authMode = "register";
 
         // 1. Tell the backend about the status change
         try {
-            // NOTE: We are hardcoding driver_id: 1 for testing. We will make this dynamic later.
             const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/driver/status", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
-                    driver_id: 1, 
+                    driver_id: activeDriverId, // <-- Fixed variable
                     is_available: isOnline ? 1 : 0 
                 })
             });
@@ -703,27 +814,32 @@ let authMode = "register";
         hideIncomingRequestOverlay();
         console.log(`Attempting to claim ride in database: ${req.id}`);
 
+        // CRITICAL FIX: Pull the active ID from memory
+        const activeDriverId = localStorage.getItem("current_driver_id");
+        if (!activeDriverId) {
+            alert("Error: No captain logged in.");
+            return;
+        }
+
         try {
-            // 1. Tell the backend we want to accept this ride
             const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/accept", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     ride_id: req.id,
-                    driver_id: 1 // Still hardcoded for testing
+                    driver_id: activeDriverId // <-- Fixed variable
                 })
             });
             
             const data = await response.json();
             
-            // 2. If the backend locked it in successfully, update the UI
             if (data.status === "success") {
                 console.log("Backend confirmed! Ride accepted.");
                 
                 // Set navigation state
                 state.activeRide = {
                     request: req,
-                    state: 'pickup', // pickup -> otp -> dropoff -> fare
+                    state: 'pickup', 
                     routePoints: [],
                     routeIndex: 0
                 };
@@ -738,7 +854,6 @@ let authMode = "register";
                 document.getElementById('nav-dropoff-address').textContent = req.dropoff.address;
                 document.getElementById('nav-hint-otp').textContent = req.startOtp;
 
-                // Hide inputs/stats panel and show active nav panel
                 document.getElementById('active-navigation-widget').classList.remove('hidden');
                 document.getElementById('start-ride-otp-container').classList.add('hidden');
 
@@ -746,13 +861,12 @@ let authMode = "register";
                 drawActiveRideRoute(req.pickup);
                 
             } else {
-                // If someone else claimed it first, or it failed
                 alert("Failed to accept ride: " + data.message);
-                triggerMockBookingLoop(); // Start searching again
+                triggerMockBookingLoop(); 
             }
         } catch (error) {
             console.error("Network error accepting ride:", error);
-            alert("Network error connecting to backend.");
+            alert("Network error connecting to backend. Check console.");
             triggerMockBookingLoop();
         }
     }
@@ -767,6 +881,13 @@ let authMode = "register";
             return;
         }
 
+        // CRITICAL FIX: Pull the active ID from memory
+        const activeDriverId = localStorage.getItem("current_driver_id");
+        if (!activeDriverId) {
+            alert("Error: No captain logged in.");
+            return;
+        }
+
         try {
             console.log(`Sending OTP ${enteredOtp} for Ride ID ${state.activeRide.request.id}...`);
             // 1. Send the OTP to the backend
@@ -775,7 +896,7 @@ let authMode = "register";
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     ride_id: state.activeRide.request.id,
-                    driver_id: 1, // Added this because your PHP requires it!
+                    driver_id: activeDriverId, // <-- Fixed variable
                     otp: enteredOtp
                 })
             });
@@ -806,7 +927,7 @@ let authMode = "register";
         }
     }
 
-    function drawActiveRideRoute(destination) {
+    async function drawActiveRideRoute(destination) {
         if (!state.map) return;
 
         // Clean old markers & polylines
@@ -900,10 +1021,10 @@ let authMode = "register";
             const newBtn = verifyCodeBtn.cloneNode(true);
             verifyCodeBtn.parentNode.replaceChild(newBtn, verifyCodeBtn);
 
-            // BACKEND INJECTION #1: Start Ride with OTP
             newBtn.addEventListener('click', async () => {
                 const enteredOtp = document.getElementById('input-start-ride-otp').value.trim();
                 const startError = document.getElementById('start-otp-error');
+                const activeDriverId = localStorage.getItem("current_driver_id"); // <-- Get ID
                 
                 try {
                     const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/start", {
@@ -911,7 +1032,7 @@ let authMode = "register";
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             ride_id: ride.request.id,
-                            driver_id: 1, // Hardcoded for testing
+                            driver_id: activeDriverId, // <-- Fixed variable
                             otp: enteredOtp
                         })
                     });
@@ -961,13 +1082,14 @@ let authMode = "register";
 
             // BACKEND INJECTION #2: Complete the Ride
             newBtn.addEventListener('click', async () => {
+                const activeDriverId = localStorage.getItem("current_driver_id"); // <-- Get ID
                 try {
                     const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/complete", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             ride_id: ride.request.id,
-                            driver_id: 1 // Hardcoded for testing
+                            driver_id: activeDriverId // <-- Fixed variable
                         })
                     });
 
@@ -1104,6 +1226,7 @@ let authMode = "register";
     /* ==========================================================================
        HELPERS & AUDIO BEEP SIMULATION
        ========================================================================== */
+
     function beep() {
         try {
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1127,6 +1250,54 @@ let authMode = "register";
             logDebug("Audio Beep blocked by browser auto-play policy.");
         }
     }
+
+    /**
+         * PHASE 3: Fetch Driver Profile
+         */
+        async function fetchDriverProfile(driverId) {
+            try {
+                // Make sure to use your full local URL here to prevent routing issues
+                const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=get_driver_profile", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ driver_id: driverId })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    console.log("Profile Data Restored:", result.data);
+                    
+                    // 1. Update the internal app memory
+                    state.driver.name = result.data.name;
+                    state.driver.phone = result.data.mobile || result.data.phone;
+                    state.driver.vehicleType = result.data.vehicle_type || 'bike';
+                    state.driver.plateNumber = result.data.plate_number || 'UNKNOWN';
+
+                    // 2. Update the Sidebar UI
+                    const nameTag = document.getElementById('sidebar-captain-name');
+                    if (nameTag) nameTag.textContent = state.driver.name;
+
+                    const vehicleLabels = {
+                        bike: "Qwikk Bike", scooty: "Scooty", auto: "Auto",
+                        'bike-pink': "Pink Bike", 'cab-economy': "Cab Economy",
+                        'cab-priority': "Cab Priority", 'cab-premium': "Cab Premium", 'cab-xl': "Cab XL"
+                    };
+                    const displayVehicle = vehicleLabels[state.driver.vehicleType] || "Vehicle";
+                    
+                    const vehicleTag = document.getElementById('sidebar-captain-vehicle');
+                    if (vehicleTag) {
+                        vehicleTag.innerHTML = `${displayVehicle} &bull; ${state.driver.plateNumber}`;
+                    }
+
+                    return result.data;
+                } else {
+                    console.error("Profile Error:", result.message);
+                }
+            } catch (error) {
+                console.error("Network Error:", error);
+            }
+        }
 }
 
 if (document.readyState === 'loading') {
