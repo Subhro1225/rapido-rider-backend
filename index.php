@@ -113,6 +113,24 @@ switch ($route) {
         }
         break;
 
+    case 'api/driver/earnings':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $data = json_decode(file_get_contents("php://input"), true);
+            $controller = new \App\Controllers\RiderController();
+            $controller->getDriverEarnings($data);
+            exit;
+        }
+        break;
+
+    case 'api/rides/settle':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $data = json_decode(file_get_contents("php://input"), true);
+            $controller = new \App\Controllers\RiderController();
+            $controller->settleRidePayment($data);
+            exit;
+        }
+        break;
+
     default:
         http_response_code(404);
 

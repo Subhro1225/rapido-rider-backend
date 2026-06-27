@@ -10,6 +10,8 @@ class RiderController {
         $name = $data['name'] ?? '';
         $mobile = $data['mobile'] ?? '';
         $password = $data['password'] ?? '';
+        $vehicleType = $data['vehicle_type'] ?? 'bike';
+        $plateNumber = $data['plate_number'] ?? '';
 
         if (empty($name) || empty($mobile) || empty($password)) {
             Response::json([
@@ -35,18 +37,20 @@ class RiderController {
                 return;
             }
 
-            // OPTIMIZED: Securely hash the password using Bcrypt before saving it
+            // Securely hash the password using Bcrypt before saving it
             $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
 
             // Insert the new driver record into the database
-            $insertQuery = "INSERT INTO drivers (name, mobile, password, is_available, created_at) 
-                            VALUES (:name, :mobile, :password, 0, NOW())";
+            $insertQuery = "INSERT INTO drivers (name, mobile, password, vehicle_type, plate_number, is_available, created_at) 
+                            VALUES (:name, :mobile, :password, :vehicle_type, :plate_number, 0, NOW())";
             
             $insertStmt = $db->prepare($insertQuery);
             $insertStmt->execute([
                 ':name' => $name,
                 ':mobile' => $mobile,
-                ':password' => $hashedPassword
+                ':password' => $hashedPassword,
+                ':vehicle_type' => $vehicleType,
+                ':plate_number' => $plateNumber
             ]);
 
             Response::json([
@@ -332,77 +336,45 @@ class RiderController {
     }
 
     public function settleRidePayment($data) {
-        $rideId = $data['ride_id'] ?? '';
-        $paymentMethod = $data['payment_method'] ?? 'cash'; // Default to cash if not specified
+    $rideId = $data['ride_id'] ?? '';
+    $paymentMethod = $data['payment_method'] ?? 'cash';
 
-        if (empty($rideId)) {
-            Response::json([
-                "status" => "error",
-                "message" => "Ride ID parameter is required for payment processing."
-            ], 400);
-        }
-
-        try {
-            $db = Database::getInstance();
-
-            // 1. Verify the ride exists and is fully completed
-            $rideQuery = "SELECT id, fare, ride_status FROM rides WHERE id = :ride_id LIMIT 1";
-            $rideStmt = $db->prepare($rideQuery);
-            $rideStmt->execute([':ride_id' => $rideId]);
-            $ride = $rideStmt->fetch();
-
-            if (!$ride) {
-                Response::json(["status" => "error", "message" => "Ride record not found."], 404);
-                return;
-            }
-
-            if ($ride['ride_status'] !== 'completed') {
-                Response::json([
-                    "status" => "error", 
-                    "message" => "Payment processing rejected. Ride state must be 'completed' first."
-                ], 400);
-                return;
-            }
-
-            // 2. Check if a payment transaction has already been logged for this ride
-            $payCheckQuery = "SELECT id FROM payments WHERE ride_id = :ride_id LIMIT 1";
-            $payCheckStmt = $db->prepare($payCheckQuery);
-            $payCheckStmt->execute([':ride_id' => $rideId]);
-            
-            if ($payCheckStmt->fetch()) {
-                Response::json(["status" => "error", "message" => "Payment for this ride has already been settled."], 409);
-                return;
-            }
-
-            // 3. Process the payout injection into the payments ledger
-            $insertQuery = "INSERT INTO payments (ride_id, amount, payment_status, payment_method, created_at) 
-                            VALUES (:ride_id, :amount, 'success', :payment_method, NOW())";
-            $insertStmt = $db->prepare($insertQuery);
-            $insertStmt->execute([
-                ':ride_id' => $rideId,
-                ':amount' => $ride['fare'],
-                ':payment_method' => $paymentMethod
-            ]);
-
-            $updateRideQuery = "UPDATE rides SET payment_status = 'success' WHERE id = :ride_id";
-            $updateRideStmt = $db->prepare($updateRideQuery);
-            $updateRideStmt->execute([':ride_id' => $rideId]);
-
-            Response::json([
-                "status" => "success",
-                "message" => "Payment transaction settled successfully.",
-                "ride_id" => $rideId,
-                "earnings_realized" => $ride['fare'],
-                "payment_status" => "success"
-            ]);
-
-        } catch (\PDOException $e) {
-            Response::json([
-                "status" => "error",
-                "message" => "Payment transaction execution failed: " . $e->getMessage()
-            ], 500);
-        }
+    if (empty($rideId)) {
+        Response::json(["status" => "error", "message" => "Ride ID is required."], 400);
+        return;
     }
+
+    $db = Database::getInstance();
+
+    // 1. First, fetch the correct user_id from the ride itself!
+    $rideStmt = $db->prepare("SELECT user_id, fare FROM rides WHERE id = :ride_id");
+    $rideStmt->execute([':ride_id' => $rideId]);
+    $ride = $rideStmt->fetch(\PDO::FETCH_ASSOC);
+
+    if (!$ride) {
+        Response::json(["status" => "error", "message" => "Ride not found."], 404);
+        return;
+    }
+
+    // 2. Now perform the payment insert using the ID we just fetched
+    $stmt = $db->prepare("
+        INSERT INTO payments (ride_id, user_id, amount, payment_method, payment_status, created_at) 
+        VALUES (:ride_id, :user_id, :amount, :method, 'success', NOW())
+    ");
+    
+    $stmt->execute([
+        ':ride_id' => $rideId,
+        ':user_id' => $ride['user_id'], // Guaranteed to be valid
+        ':amount' => $ride['fare'],
+        ':method' => $paymentMethod
+    ]);
+
+    // 3. Update the ride status
+    $updateStmt = $db->prepare("UPDATE rides SET payment_status = 'paid' WHERE id = :ride_id");
+    $updateStmt->execute([':ride_id' => $rideId]);
+
+    Response::json(["status" => "success"]);
+}
 
     /**
      * Phase 3: Get Captain Profile
@@ -420,7 +392,7 @@ class RiderController {
         try {
             $db = Database::getInstance();
             $stmt = $db->prepare("
-                SELECT id, name, mobile, vehicle_number, is_available, average_rating 
+                SELECT id, name, mobile, vehicle_type, plate_number, is_available, average_rating 
                 FROM drivers 
                 WHERE id = :id
             ");
@@ -598,6 +570,79 @@ class RiderController {
             Response::json([
                 "status" => "error",
                 "message" => "Analytics aggregation failed: " . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getDriverEarnings($data) {
+        $driverId = $data['driver_id'] ?? '';
+
+        if (empty($driverId)) {
+            Response::json([
+                "status" => "error",
+                "message" => "Driver ID parameter is required."
+            ], 400);
+            return;
+        }
+
+        try {
+            $db = Database::getInstance();
+
+            // Today's earnings and ride count
+            $todayStmt = $db->prepare("
+                SELECT 
+                    COALESCE(SUM(fare), 0) as today,
+                    COUNT(id) as rides
+                FROM rides 
+                WHERE driver_id = :driver_id 
+                  AND DATE(created_at) = CURDATE()
+                  AND ride_status = 'completed'
+            ");
+            $todayStmt->execute([':driver_id' => $driverId]);
+            $today = $todayStmt->fetch(\PDO::FETCH_ASSOC);
+
+            // Total wallet (all time completed fares)
+            $walletStmt = $db->prepare("
+                SELECT COALESCE(SUM(fare), 0) as total_wallet 
+                FROM rides 
+                WHERE driver_id = :driver_id AND ride_status = 'completed'
+            ");
+            $walletStmt->execute([':driver_id' => $driverId]);
+            $wallet = $walletStmt->fetch(\PDO::FETCH_ASSOC);
+
+            // Weekly earnings (last 7 days mapped to mon-sun)
+            $weeklyStmt = $db->prepare("
+                SELECT DAYNAME(created_at) as day_name, COALESCE(SUM(fare), 0) as total
+                FROM rides
+                WHERE driver_id = :driver_id
+                  AND ride_status = 'completed'
+                  AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                GROUP BY DAYNAME(created_at)
+            ");
+            $weeklyStmt->execute([':driver_id' => $driverId]);
+            $weeklyRows = $weeklyStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            $weekly = ['mon' => 0, 'tue' => 0, 'wed' => 0, 'thu' => 0, 'fri' => 0, 'sat' => 0, 'sun' => 0];
+            $dayMap = ['Monday'=>'mon','Tuesday'=>'tue','Wednesday'=>'wed','Thursday'=>'thu','Friday'=>'fri','Saturday'=>'sat','Sunday'=>'sun'];
+            foreach ($weeklyRows as $row) {
+                $key = $dayMap[$row['day_name']] ?? null;
+                if ($key) $weekly[$key] = (float)$row['total'];
+            }
+
+            Response::json([
+                "status" => "success",
+                "data" => [
+                    "today" => (float)$today['today'],
+                    "rides" => (int)$today['rides'],
+                    "total_wallet" => (float)$wallet['total_wallet'],
+                    "weekly" => $weekly
+                ]
+            ]);
+
+        } catch (\PDOException $e) {
+            Response::json([
+                "status" => "error",
+                "message" => "Earnings fetch failed: " . $e->getMessage()
             ], 500);
         }
     }

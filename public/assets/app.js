@@ -13,6 +13,7 @@ function initializeApp() {
     }
 
 let authMode = "register";
+    const API_BASE_URL = "http://localhost/rapido-rider-backend/index.php";
 
     // Default State
     const state = {
@@ -65,14 +66,14 @@ let authMode = "register";
         if (localStorage.getItem('qwikk_captain_logged_in') === 'true') {
             console.log("Found existing session. Bypassing login.");
             
-            // PHASE 1 FIX: Grab the real ID and fetch the profile BEFORE showing the map
             const activeDriverId = localStorage.getItem("current_driver_id");
             if (activeDriverId) {
                 fetchDriverProfile(activeDriverId);
+                fetchDriverEarnings(activeDriverId);
+                fetchDriverHistory(activeDriverId);
             }
 
             switchScreen('screen-app');
-            // Slight delay ensures the map container is fully rendered before Leaflet injects the map
             setTimeout(() => initLeafletMap(), 100); 
         }
 
@@ -193,7 +194,9 @@ let authMode = "register";
                 body: JSON.stringify({
                     name: nameVal,
                     mobile: phoneVal,
-                    password: "password123"
+                    password: "password123",
+                    vehicle_type: loginVehicleSelect.value,
+                    plate_number: loginPlateInput.value.toUpperCase()
                 })
             }
         );
@@ -296,10 +299,21 @@ let authMode = "register";
 
                 if (authMode === "register") {
 
-                    // Registration flow starts here
+                    // After signup, immediately login to get the real DB driver_id
+                    const loginResp = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/driver/login", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ mobile: loginPhoneInput.value.trim(), otp: "1234" })
+                    });
+                    const loginData = await loginResp.json();
+                    if (loginData.status === "success") {
+                        localStorage.setItem("current_driver_id", loginData.driver.id);
+                    } else {
+                        alert("Registered but could not fetch your driver ID: " + loginData.message);
+                        return;
+                    }
 
                     localStorage.setItem('qwikk_captain_logged_in', 'true');
-                    // Correct OTP -> populate state & load main screen
                     otpErrorMsg.classList.add('hidden');
                     
                     state.driver.name = loginNameInput.value.trim();
@@ -307,7 +321,6 @@ let authMode = "register";
                     state.driver.vehicleType = loginVehicleSelect.value;
                     state.driver.plateNumber = loginPlateInput.value.toUpperCase();
 
-                    // Format vehicle display name
                     const vehicleLabels = {
                         bike: "Qwikk Bike",
                         scooty: "Scooty",
@@ -323,7 +336,11 @@ let authMode = "register";
                     document.getElementById('sidebar-captain-name').textContent = state.driver.name;
                     document.getElementById('sidebar-captain-vehicle').innerHTML = vehicleDisplay;
                     
-                    // Initialise Leaflet Map
+                    // Load earnings & history immediately after registration
+                    const newDriverId = localStorage.getItem("current_driver_id");
+                    fetchDriverEarnings(newDriverId);
+                    fetchDriverHistory(newDriverId);
+
                     switchScreen('screen-app');
                     initLeafletMap();
                 }
@@ -332,14 +349,17 @@ let authMode = "register";
 
                     if (result.status === "success") {
                         localStorage.setItem("qwikk_captain_logged_in", "true");
-                        
-                        // THE FIX: Save the REAL dynamic ID from your database
                         localStorage.setItem("current_driver_id", result.driver.id); 
 
                         state.driver.name = result.driver.name;
                         state.driver.phone = result.driver.mobile;
 
                         document.getElementById("sidebar-captain-name").textContent = result.driver.name;
+
+                        // Load profile, earnings & history right after login
+                        fetchDriverProfile(result.driver.id);
+                        fetchDriverEarnings(result.driver.id);
+                        fetchDriverHistory(result.driver.id);
 
                         switchScreen("screen-app");
                         initLeafletMap();
@@ -473,11 +493,11 @@ let authMode = "register";
     }
 
         /**
-         * PHASE 3: Fetch Driver Profile
+         * PHASE 2: Fetch Driver Earnings (Creates the function!)
          */
-        async function fetchDriverProfile(driverId) {
+        async function fetchDriverEarnings(driverId) {
             try {
-                const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=get_driver_profile", {
+                const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/driver/earnings", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ driver_id: driverId })
@@ -486,33 +506,57 @@ let authMode = "register";
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    console.log("Profile Data Restored:", result.data);
+                    // Inject real database data into the app state
+                    state.earnings.today = result.data.today;
+                    state.earnings.rides = result.data.rides;
+                    state.earnings.totalWallet = result.data.total_wallet;
+                    state.weeklyEarnings = result.data.weekly;
                     
-                    // Update internal memory
-                    state.driver.name = result.data.name;
-                    state.driver.vehicleType = result.data.vehicle_type || 'bike';
-                    state.driver.plateNumber = result.data.plate_number || 'UNKNOWN';
-
-                    // Paint the UI
-                    const nameTag = document.getElementById('sidebar-captain-name');
-                    if (nameTag) nameTag.textContent = state.driver.name;
-
-                    const vehicleLabels = {
-                        bike: "Qwikk Bike", scooty: "Scooty", auto: "Auto",
-                        'bike-pink': "Pink Bike", 'cab-economy': "Cab Economy",
-                        'cab-priority': "Cab Priority", 'cab-premium': "Cab Premium", 'cab-xl': "Cab XL"
-                    };
-                    const displayVehicle = vehicleLabels[state.driver.vehicleType] || "Vehicle";
-                    
-                    const vehicleTag = document.getElementById('sidebar-captain-vehicle');
-                    if (vehicleTag) {
-                        vehicleTag.innerHTML = `${displayVehicle} &bull; ${state.driver.plateNumber}`;
-                    }
+                    // Force the UI to repaint
+                    if (typeof updateEarningsDisplay === "function") updateEarningsDisplay();
                 }
             } catch (error) {
-                console.error("Network Error restoring profile:", error);
+                console.error("Network Error fetching earnings:", error);
             }
         }
+
+        /**
+         * PHASE 3: Fetch Driver Ride History (Creates the function!)
+         */
+        async function fetchDriverHistory(driverId) {
+            try {
+                const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=get_driver_history", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ driver_id: driverId })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    console.log("Ride History Restored:", result.data);
+                    
+                    // Map the SQL column names from your PHP to the keys your frontend expects
+                    state.history = result.data.map(trip => ({
+                        date: new Date(trip.ride_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+                        payout: trip.fare,
+                        pickupName: trip.pickup_location,
+                        dropoffName: trip.destination,
+                        riderName: trip.rider_name,
+                        status: trip.ride_status
+                    }));
+
+                    // Force the UI to repaint the history list
+                    if (typeof updateHistoryUI === "function") updateHistoryUI();
+                    
+                } else {
+                    console.error("History Error:", result.message);
+                }
+            } catch (error) {
+                console.error("Network Error fetching history:", error);
+            }
+        }
+
 
         /**
          * PHASE 3: Submit a Ride Rating
@@ -1112,60 +1156,77 @@ let authMode = "register";
        /* ==========================================================================
        FARE COLLECTION & RIDE RESET (CRASH-PROOF VERSION)
        ========================================================================== */
-    function showFareCollection() {
+    async function showFareCollection() {
         console.log("Triggering final fare collection UI...");
         
+        const activeDriverId = localStorage.getItem("current_driver_id");
+        const rideId = state.activeRide && state.activeRide.request ? state.activeRide.request.id : null;
+        const fare = state.activeRide && state.activeRide.request ? state.activeRide.request.payout : 150;
+
+        if (!rideId) {
+            alert("Error: Cannot settle payment. No active ride ID found.");
+            return;
+        }
+
         try {
-            // 1. Get the fare amount
-            const fare = state.activeRide && state.activeRide.request ? state.activeRide.request.payout : 150;
-            alert(`🎉 TRIP COMPLETED!\n\nPlease collect ₹${fare} from the passenger.`);
+            // 1. Tell the database the cash was collected!
+            const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/rides/settle", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ride_id: rideId,
+                    payment_method: "cash" 
+                })
+            });
 
-            // 2. Safely clear the map routes and markers
-            if (state.map && state.mapRouteLine) state.map.removeLayer(state.mapRouteLine);
-            if (state.map && state.passengerMarker) state.map.removeLayer(state.passengerMarker);
+            const data = await response.json();
 
-            // 3. Reset the Captain's state
-            state.activeRide = null;
+            if (data.status === "success") {
+                alert(`🎉 TRIP COMPLETED!\n\nCash collected: ₹${fare}`);
 
-            // 4. Safely hide the active navigation panel (Checks if ID exists first!)
-            const navPanel = document.getElementById('active-navigation-widget');
-            if (navPanel) {
-                navPanel.classList.add('hidden');
-            } else {
-                console.warn("Could not find 'active-navigation-widget' to hide.");
-            }
-            
-            // 5. Safely reset the status text
-            const statusText = document.getElementById('txt-nav-status');
-            if (statusText) statusText.textContent = "Searching for passengers nearby...";
+                // 2. Fetch the fresh stats from the database so the dashboard updates
+                fetchDriverEarnings(activeDriverId);
+                fetchDriverHistory(activeDriverId);
 
-            // 6. Safely reset the main action button
-            const actionBtn = document.getElementById('btn-navigation-action');
-            if (actionBtn) {
-                actionBtn.textContent = "Waiting for rides...";
-                actionBtn.disabled = true;
-            }
+                // 3. Reset the UI for the next passenger
+                if (state.map && state.mapRouteLine) state.map.removeLayer(state.mapRouteLine);
+                if (state.map && state.passengerMarker) state.map.removeLayer(state.passengerMarker);
 
-            // 7. Put the Captain back on the market!
-            if (typeof triggerMockBookingLoop === "function") {
+                state.activeRide = null;
+
+                const navPanel = document.getElementById('active-navigation-widget');
+                if (navPanel) navPanel.classList.add('hidden');
+                
+                const statusText = document.getElementById('txt-nav-status');
+                if (statusText) statusText.textContent = "Searching for passengers nearby...";
+
+                const actionBtn = document.getElementById('btn-navigation-action');
+                if (actionBtn) {
+                    actionBtn.textContent = "Waiting for rides...";
+                    actionBtn.disabled = true;
+                }
+
+                // Put the Captain back online
                 triggerMockBookingLoop();
-            }
 
-            console.log("UI successfully reset!");
+            } else {
+                alert("Payment settlement failed: " + data.message);
+            }
 
         } catch (error) {
-            console.error("CRASH DURING UI RESET:", error);
-            alert("Backend updated, but UI failed to reset. Check console for details.");
+            console.error("Network error settling payment:", error);
+            alert("Network error trying to settle payment.");
         }
     }
 
     function updateEarningsDisplay() {
+        // Update main dashboard metrics
         document.getElementById('stat-earnings').textContent = `₹${state.earnings.today}`;
         document.getElementById('stat-rides').textContent = state.earnings.rides;
         
-        // Update payouts panel
-        const totalFri = state.weeklyEarnings.fri;
-        document.getElementById('wallet-withdrawable').textContent = `₹${1240 + totalFri}`;
+        // PHASE 2 FIX: Use real total wallet value instead of hardcoded 1240
+        const walletTotal = state.earnings.totalWallet !== undefined ? state.earnings.totalWallet : 0;
+        document.getElementById('wallet-withdrawable').textContent = `₹${walletTotal}`;
 
         // Update bar chart height values (mon-sun)
         const weeklyValues = state.weeklyEarnings;
