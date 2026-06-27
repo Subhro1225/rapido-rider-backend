@@ -230,8 +230,47 @@ let authMode = "register";
 
         });
 
+        async function loginCaptain(phone) {
+
+            try {
+                console.log({
+                    mobile: phone,
+                    otp: "1234"
+                });
+
+                const response = await fetch("http://localhost/rapido-rider-backend/index.php?route=api/driver/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        mobile: phone,
+                        otp: '1234'
+                    })
+                });
+
+                const data = await response.json();
+
+                console.log("HTTP Status:", response.status);
+                console.log("Response:", data);
+
+                return data;
+
+            } catch (error) {
+
+                console.error(error);
+
+                return {
+                    status: "error",
+                    message: "Server connection failed."
+                };
+
+            }
+
+        }
+
         // Helper to verify OTP code
-        const handleOtpSubmit = () => {
+        const handleOtpSubmit = async () => {
             try {
                 
                 let otpCode = '';
@@ -283,9 +322,27 @@ let authMode = "register";
                 }
                 else {
 
-                    console.log("Login flow");
+                    const result = await loginCaptain(loginOnlyPhoneInput.value.trim());
 
-                    alert("Login successful!");
+                    if (result.status === "success") {
+
+                        localStorage.setItem("qwikk_captain_logged_in", "true");
+
+                        state.driver.name = result.driver.name;
+                        state.driver.phone = result.driver.mobile;
+
+                        document.getElementById("sidebar-captain-name").textContent = result.driver.name;
+
+                        switchScreen("screen-app");
+                        initLeafletMap();
+
+                    } else {
+
+                        alert(result.message);
+
+                    }
+
+                    console.log(result);
 
                 }
             } catch (err) {
@@ -296,6 +353,56 @@ let authMode = "register";
 
         // Verify OTP constraint
         verifyOtpBtn.addEventListener('click', handleOtpSubmit);
+
+        otpInputs.forEach((input, index) => {
+
+    // Auto move to next input
+    input.addEventListener("input", (e) => {
+
+        input.value = input.value.replace(/\D/g, "");
+
+        if (input.value.length === 1 && index < otpInputs.length - 1) {
+            otpInputs[index + 1].focus();
+        }
+
+    });
+
+    // Handle backspace
+    input.addEventListener("keydown", (e) => {
+
+                    if (e.key === "Backspace" && input.value === "" && index > 0) {
+                        otpInputs[index - 1].focus();
+                    }
+
+                    if (e.key === "Enter") {
+                        handleOtpSubmit();
+                    }
+
+                });
+
+            });
+
+            otpInputs[0].addEventListener("paste", (e) => {
+
+            e.preventDefault();
+
+            const pasted = (e.clipboardData || window.clipboardData)
+                .getData("text")
+                .replace(/\D/g, "")
+                .slice(0, 4);
+
+            pasted.split("").forEach((digit, i) => {
+                if (otpInputs[i]) {
+                    otpInputs[i].value = digit;
+                }
+            });
+
+            // Focus the last filled box
+            if (pasted.length > 0) {
+                otpInputs[Math.min(pasted.length - 1, 3)].focus();
+            }
+
+        });
 
         // Allow pressing Enter on the final input to submit
         otpInputs.forEach((input, index) => {
