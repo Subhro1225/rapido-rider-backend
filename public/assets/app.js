@@ -32,11 +32,11 @@ let authMode = "register";
             acceptanceRate: 100
         },
         weeklyEarnings: {
-            mon: 350,
-            tue: 680,
-            wed: 190,
-            thu: 920,
-            fri: 0, // Today
+            mon: 0,
+            tue: 0,
+            wed: 0,
+            thu: 0,
+            fri: 0,
             sat: 0,
             sun: 0
         },
@@ -1161,12 +1161,26 @@ let authMode = "register";
         
         const activeDriverId = localStorage.getItem("current_driver_id");
         const rideId = state.activeRide && state.activeRide.request ? state.activeRide.request.id : null;
-        const fare = state.activeRide && state.activeRide.request ? state.activeRide.request.payout : 150;
+        const fare = state.activeRide && state.activeRide.request ? state.activeRide.request.payout : 0;
 
         if (!rideId) {
             alert("Error: Cannot settle payment. No active ride ID found.");
             return;
         }
+
+        // Populate fare widget with real values before showing it
+        const fareEl = document.getElementById('fare-collected-amount');
+        const payoutEl = document.getElementById('fare-breakdown-payout');
+        const totalEl = document.getElementById('fare-breakdown-total');
+        if (fareEl) fareEl.textContent = `₹${fare}`;
+        if (payoutEl) payoutEl.textContent = `₹${fare}`;
+        if (totalEl) totalEl.textContent = `₹${fare}`;
+
+        // Show the fare widget
+        const fareWidget = document.getElementById('fare-collection-widget');
+        if (fareWidget) fareWidget.classList.remove('hidden');
+        const navWidget = document.getElementById('active-navigation-widget');
+        if (navWidget) navWidget.classList.add('hidden');
 
         try {
             // 1. Tell the database the cash was collected!
@@ -1224,7 +1238,10 @@ let authMode = "register";
         document.getElementById('stat-earnings').textContent = `₹${state.earnings.today}`;
         document.getElementById('stat-rides').textContent = state.earnings.rides;
         
-        // PHASE 2 FIX: Use real total wallet value instead of hardcoded 1240
+        // Update sidebar ride count
+        const sidebarCount = document.getElementById('sidebar-ride-count');
+        if (sidebarCount) sidebarCount.textContent = state.earnings.rides;
+
         const walletTotal = state.earnings.totalWallet !== undefined ? state.earnings.totalWallet : 0;
         document.getElementById('wallet-withdrawable').textContent = `₹${walletTotal}`;
 

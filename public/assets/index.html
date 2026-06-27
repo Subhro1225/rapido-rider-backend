@@ -171,10 +171,10 @@
                         <div class="profile-avatar">🧑‍✈️</div>
                         <div class="profile-details">
                             <h4 id="sidebar-captain-name">Captain Name</h4>
-                            <p id="sidebar-captain-vehicle">Bike &bull; JH 05 AB 1234</p>
+                            <p id="sidebar-captain-vehicle">Loading...</p>
                             <div class="driver-stars" style="margin-top: 4px; display: flex; align-items: center; gap: 4px;">
                                 <i data-lucide="star" style="width:12px;height:12px;fill:#FBC50A;stroke:none;"></i>
-                                <span style="font-size:12px;color:var(--text-secondary);">4.9 (420 rides)</span>
+                                <span style="font-size:12px;color:var(--text-secondary);">4.9 (<span id="sidebar-ride-count">0</span> rides)</span>
                             </div>
                         </div>
                     </div>
@@ -304,24 +304,24 @@
                                 <div class="fare-circle">₹</div>
                                 <div class="fare-collect-details">
                                     <h3>Collect Cash / Wallet Fare</h3>
-                                    <h2 id="fare-collected-amount">₹154</h2>
+                                    <h2 id="fare-collected-amount">₹0</h2>
                                 </div>
                                 <div class="fare-breakdown-list">
                                     <div class="fare-item-row">
                                         <span>Distance Traveled</span>
-                                        <span id="fare-breakdown-dist">4.2 km</span>
+                                        <span id="fare-breakdown-dist">-- km</span>
                                     </div>
                                     <div class="fare-item-row">
                                         <span>Ride Payout</span>
-                                        <span id="fare-breakdown-payout">₹144</span>
+                                        <span id="fare-breakdown-payout">₹0</span>
                                     </div>
                                     <div class="fare-item-row">
                                         <span>Promo / Tips</span>
-                                        <span>₹10</span>
+                                        <span>₹0</span>
                                     </div>
                                     <div class="fare-item-row bold">
                                         <span>Total Earnings</span>
-                                        <span id="fare-breakdown-total">₹154</span>
+                                        <span id="fare-breakdown-total">₹0</span>
                                     </div>
                                 </div>
                                 <button id="btn-complete-fare-done" class="btn-ride-nav-action">Confirm Payment Received</button>
@@ -372,7 +372,7 @@
                             <div class="payout-pills-wrap">
                                 <div class="payout-row">
                                     <h4>Available Wallet Payout</h4>
-                                    <span id="wallet-withdrawable" class="amt">₹1240</span>
+                                    <span id="wallet-withdrawable" class="amt">₹0</span>
                                 </div>
                                 <button id="btn-withdraw-payout" class="btn-primary btn-block">
                                     <i data-lucide="arrow-up-right"></i>

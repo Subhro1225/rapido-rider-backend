@@ -1,11 +1,9 @@
-
-
 -- phpMyAdmin SQL Dump
 -- version 5.2.1
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 24, 2026 at 11:23 AM
+-- Generation Time: Jun 27, 2026 at 09:43 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -34,9 +32,12 @@ CREATE TABLE `drivers` (
   `name` varchar(100) NOT NULL,
   `mobile` varchar(20) NOT NULL,
   `vehicle_number` varchar(50) NOT NULL,
+  `vehicle_type` varchar(30) DEFAULT 'bike',
+  `plate_number` varchar(20) DEFAULT '',
   `is_available` tinyint(1) DEFAULT 1,
+  `average_rating` decimal(3,2) DEFAULT 5.00,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `password` varchar(8) NOT NULL,
+  `password` varchar(255) NOT NULL,
   `latitude` varchar(50) DEFAULT NULL,
   `longitude` varchar(50) DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL
@@ -46,8 +47,9 @@ CREATE TABLE `drivers` (
 -- Dumping data for table `drivers`
 --
 
-INSERT INTO `drivers` (`id`, `name`, `mobile`, `vehicle_number`, `is_available`, `created_at`, `password`, `latitude`, `longitude`, `updated_at`) VALUES
-(1, 'Example', '1234567890', '', 1, '0000-00-00 00:00:00', 'Example1', '22.7796', '86.2343', '2026-06-24 09:07:46');
+INSERT INTO `drivers` (`id`, `name`, `mobile`, `vehicle_number`, `vehicle_type`, `plate_number`, `is_available`, `average_rating`, `created_at`, `password`, `latitude`, `longitude`, `updated_at`) VALUES
+(1, 'Example', '1234567890', '', 'bike', '', 0, 5.00, '0000-00-00 00:00:00', 'Example1', '22.7796', '86.2343', '2026-06-27 04:00:12'),
+(8, 'example 2', '1234567891', '', 'bike', '', 0, 5.00, '2026-06-27 04:39:49', '$2y$10$l', NULL, NULL, '2026-06-27 07:40:32');
 
 -- --------------------------------------------------------
 
@@ -60,9 +62,17 @@ CREATE TABLE `payments` (
   `ride_id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
   `amount` decimal(8,2) NOT NULL,
+  `payment_status` varchar(20) DEFAULT 'success',
   `payment_method` varchar(50) NOT NULL,
-  `paid_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `payments`
+--
+
+INSERT INTO `payments` (`id`, `ride_id`, `user_id`, `amount`, `payment_status`, `payment_method`, `created_at`) VALUES
+(3, 17, 2, 150.00, 'success', 'cash', '2026-06-27 07:07:24');
 
 -- --------------------------------------------------------
 
@@ -76,6 +86,8 @@ CREATE TABLE `rides` (
   `driver_id` int(11) DEFAULT NULL,
   `pickup_location` varchar(255) NOT NULL,
   `destination` varchar(255) NOT NULL,
+  `pickup_latitude` decimal(10,8) DEFAULT NULL,
+  `pickup_longitude` decimal(11,8) DEFAULT NULL,
   `distance_km` decimal(5,2) NOT NULL,
   `fare` decimal(8,2) NOT NULL,
   `otp` varchar(60) NOT NULL,
@@ -88,9 +100,12 @@ CREATE TABLE `rides` (
 -- Dumping data for table `rides`
 --
 
-INSERT INTO `rides` (`id`, `user_id`, `driver_id`, `pickup_location`, `destination`, `distance_km`, `fare`, `otp`, `ride_status`, `payment_status`, `created_at`) VALUES
-(1, 1, NULL, 'Telco Colony, Telco Colony, Jamshedpur, Jharkhand 831004', 'Telco Club & Sports Complex, Telco Club, Jamshedpur, Jharkhand 831004', 19.07, 258.84, '$2y$10$f3mFgQxWfIkMLuNMgEqaXeusdPs1FGz2ZVqhZbId.UVAPd5PxdGW6', 'waiting', 'pending', '2026-06-19 10:41:41'),
-(3, 1, 1, 'Telco Colony, Telco Colony, Jamshedpur, Jharkhand 831004', 'Hudco Lake, Govindpur Road, Telco Colony, Jamshedpur 831004', 4.39, 82.68, '$2y$10$Rx1tkI2UZpJOMoy/CWigM.UMNKtgK0aR.aHmcN1wo3EOs87DC6dx2', 'driver_arrived', 'pending', '2026-06-19 11:10:52');
+INSERT INTO `rides` (`id`, `user_id`, `driver_id`, `pickup_location`, `destination`, `pickup_latitude`, `pickup_longitude`, `distance_km`, `fare`, `otp`, `ride_status`, `payment_status`, `created_at`) VALUES
+(1, 1, 1, 'Telco Colony, Telco Colony, Jamshedpur, Jharkhand 831004', 'Telco Club & Sports Complex, Telco Club, Jamshedpur, Jharkhand 831004', NULL, NULL, 19.07, 258.84, '1234', 'accepted', '', '2026-06-19 10:41:41'),
+(3, 1, 1, 'Telco Colony, Telco Colony, Jamshedpur, Jharkhand 831004', 'Hudco Lake, Govindpur Road, Telco Colony, Jamshedpur 831004', NULL, NULL, 4.39, 82.68, '1234', 'driver_arrived', '', '2026-06-19 11:10:52'),
+(13, 1, 8, 'Telco Colony', 'Sakchi Market', NULL, NULL, 5.50, 150.00, '1234', 'completed', '', '2026-06-27 05:02:52'),
+(16, 1, 8, 'Jubilee Park Main Gate', 'Bistupur Market', NULL, NULL, 4.50, 120.00, '1234', 'completed', 'pending', '2026-06-27 06:47:21'),
+(17, 2, 8, 'Jubilee Park Main Gate', 'Bistupur Market', NULL, NULL, 4.50, 150.00, '1234', 'completed', 'paid', '2026-06-27 07:03:06');
 
 -- --------------------------------------------------------
 
@@ -184,19 +199,19 @@ ALTER TABLE `user_feedback`
 -- AUTO_INCREMENT for table `drivers`
 --
 ALTER TABLE `drivers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `payments`
 --
 ALTER TABLE `payments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `rides`
 --
 ALTER TABLE `rides`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT for table `users`
